@@ -1,0 +1,61 @@
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── Virtual Environment ──
+.venv/
+venv/
+env/
+ENV/
+
+# ── Environment Variables (NEVER commit these!) ──
+.env
+*.env
+
+# ── Database & Persistent Storage ──
+backend/data/
+*.db
+*.sqlite
+*.sqlite3
+
+# ── ChromaDB local data ──
+backend/data/chromadb/
+
+# ── Logs ──
+*.log
+logs/
+
+# ── IDE ──
+.vscode/
+.idea/
+*.code-workspace
+
+# ── OS files ──
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Jupyter ──
+.ipynb_checkpoints/
+
+# ── Node (for future frontend) ──
+node_modules/
+npm-debug.log*
+
+# ── Prophet / Stan compiled models ──
+*.pkl
+*.joblib
+*.h5
+
+# ── Pytest ──
+.pytest_cache/
+.coverage
+htmlcov/
