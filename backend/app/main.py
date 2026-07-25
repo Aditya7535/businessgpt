@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import engine, Base
 from app.api import upload, chat
 from app.modules.forecasting.router import router as forecast_router
+from app.modules.inventory.router import router as inventory_router
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -26,6 +27,7 @@ app.add_middleware(
 app.include_router(upload.router, prefix="/api", tags=["upload"])
 app.include_router(chat.router, prefix="/api", tags=["chat"])
 app.include_router(forecast_router, prefix="/api", tags=["forecasting"])
+app.include_router(inventory_router, prefix="/api", tags=["inventory"])
 
 @app.get("/")
 def read_root():

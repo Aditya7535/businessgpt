@@ -18,7 +18,7 @@ class ChatResponse(BaseModel):
 # In-memory conversation history (stores last 10 messages per session)
 chat_history = {}
 
-@router.post("/", response_model=ChatResponse)
+@router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
     # Initialize history for new sessions
     if request.session_id not in chat_history:

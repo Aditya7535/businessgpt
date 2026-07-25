@@ -100,10 +100,63 @@ def forecasting_node(state: GraphState):
 
     return {"context": context}
 
+def inventory_node(state: GraphState):
+    """Runs the inventory analysis engine."""
+    query = state["query"]
+    db = SessionLocal()
+    try:
+        latest_dataset = db.query(Dataset).order_by(Dataset.id.desc()).first()
+        if not latest_dataset or not latest_dataset.data:
+            return {"context": "Inventory analysis ke liye koi data nahi mila. Pehle file upload karein."}
+
+        from app.modules.inventory.engine import analyze_all_products
+        from app.modules.inventory.health_score import get_inventory_alerts, compute_inventory_health_score
+        from app.modules.inventory.router import _detect_col
+
+        columns = list(latest_dataset.data[0].keys())
+        date_col = _detect_col(columns, ["date", "order_date", "invoice_date", "month", "time"])
+        sales_col = _detect_col(columns, ["sales", "revenue", "quantity", "units", "amount", "qty"])
+        product_col = _detect_col(columns, ["product", "item", "sku", "category", "product_name"])
+        stock_col = _detect_col(columns, ["stock", "current_stock", "inventory", "on_hand"])
+        price_col = _detect_col(columns, ["price", "unit_price", "rate", "mrp", "cost"])
+
+        if not date_col or not sales_col or not product_col:
+            return {"context": f"Required columns nahi mile. Available: {columns}"}
+
+        results = analyze_all_products(
+            data=latest_dataset.data,
+            date_col=date_col,
+            sales_col=sales_col,
+            product_col=product_col,
+            stock_col=stock_col,
+            price_col=price_col,
+        )
+
+        alerts = get_inventory_alerts(results)
+        health = compute_inventory_health_score(results)
+
+        context = (
+            f"Inventory Health Score: {health['score']}/100 (Grade: {health['grade']})\n"
+            f"Critical: {alerts['critical']}\n"
+            f"Low Stock: {alerts['low_stock']}\n"
+            f"Overstock: {alerts['overstock']}\n"
+            f"Optimal: {alerts['optimal']}\n\n"
+        )
+        for item in results:
+            if "error" not in item:
+                context += f"- {item.get('insight', '')}\n"
+
+    except Exception as e:
+        context = f"Inventory analysis mein error: {str(e)}"
+    finally:
+        db.close()
+
+    return {"context": context}
+
+
 def placeholder_node(state: GraphState):
-    """For inventory and market modules (Phase 4+)."""
-    intent = state["intent"]
-    return {"context": f"'{intent}' module abhi Phase 4 mein aayega. Abhi ke liye RAG se answer de raha hoon."}
+    """For market module (Phase 5+)."""
+    return {"context": "Market intelligence module Phase 5 mein aayega. Abhi ke liye RAG se answer de raha hoon."}
 
 def synthesize_node(state: GraphState):
     """Uses Groq to generate the final natural language answer."""
@@ -139,7 +192,9 @@ def route_intent(state: GraphState):
         return "sql"
     elif intent == "forecasting":
         return "forecasting"
-    elif intent in ["inventory", "market"]:
+    elif intent == "inventory":
+        return "inventory"
+    elif intent == "market":
         return "placeholder"
     else:
         return "rag"   # rag + general
@@ -151,6 +206,7 @@ workflow.add_node("classify", classify_node)
 workflow.add_node("sql", sql_node)
 workflow.add_node("rag", rag_node)
 workflow.add_node("forecasting", forecasting_node)
+workflow.add_node("inventory", inventory_node)
 workflow.add_node("placeholder", placeholder_node)
 workflow.add_node("synthesize", synthesize_node)
 
@@ -163,6 +219,7 @@ workflow.add_conditional_edges(
         "sql": "sql",
         "rag": "rag",
         "forecasting": "forecasting",
+        "inventory": "inventory",
         "placeholder": "placeholder",
     }
 )
@@ -170,6 +227,7 @@ workflow.add_conditional_edges(
 workflow.add_edge("sql", "synthesize")
 workflow.add_edge("rag", "synthesize")
 workflow.add_edge("forecasting", "synthesize")
+workflow.add_edge("inventory", "synthesize")
 workflow.add_edge("placeholder", "synthesize")
 workflow.add_edge("synthesize", END)
 
