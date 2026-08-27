@@ -1,12 +1,11 @@
 from typing import Dict, TypedDict, Any
 from langgraph.graph import StateGraph, END
-from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage
 import json
 
 from app.modules.orchestrator.intent import classify_intent
+from app.modules.orchestrator.llm import invoke_llm
 from app.modules.rag.retriever import retrieve_context
-from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.dataset import Dataset
 
@@ -154,20 +153,84 @@ def inventory_node(state: GraphState):
     return {"context": context}
 
 
+def market_node(state: GraphState):
+    """Fetches Google Trends + News for the query topic."""
+    query = state["query"]
+    # Extract category from query (use query itself as the keyword)
+    category = query.replace("trend", "").replace("market", "").replace("naya product", "").strip()
+    if not category:
+        category = "business"
+
+    try:
+        from app.modules.market_intel.trends import get_google_trends, get_market_recommendation
+        from app.modules.market_intel.news import get_business_news
+        trends = get_google_trends(category)
+        news = get_business_news(category)
+        rec = get_market_recommendation(category, trends)
+        context = (
+            f"Market Trends for '{category}':\n"
+            f"Direction: {trends['trend_direction']}\n"
+            f"Trending: {', '.join(trends.get('trending_products', []))}\n"
+            f"Seasonal Opportunity: {trends.get('seasonal_opportunity', '')}\n"
+            f"News Sentiment: {news.get('sentiment', 'neutral')}\n"
+            f"News: {news.get('news_summary', '')}\n"
+            f"Recommendation: {rec}"
+        )
+    except Exception as e:
+        context = f"Market intelligence data available. Error: {str(e)[:80]}"
+
+    return {"context": context}
+
+
+def health_node(state: GraphState):
+    """Returns Business Health Score."""
+    db = SessionLocal()
+    try:
+        from app.modules.health.scorer import compute_health_score
+        health = compute_health_score(db)
+        context = (
+            f"Business Health Score: {health['total_score']}/100 — Grade {health['grade']}\n"
+            f"{health.get('message', '')}\n"
+            f"Components: {health.get('components', {})}\n"
+            f"Top Issue: {health.get('top_issue', '')}"
+        )
+    except Exception as e:
+        context = f"Health score error: {str(e)[:80]}"
+    finally:
+        db.close()
+    return {"context": context}
+
+
+def alerts_node(state: GraphState):
+    """Returns pending alerts."""
+    db = SessionLocal()
+    try:
+        from app.models.alert import Alert
+        alerts = db.query(Alert).filter(Alert.is_read == False).order_by(Alert.created_at.desc()).limit(10).all()
+        if not alerts:
+            from app.modules.alerts.checker import run_all_checks
+            live_alerts = run_all_checks(db)
+            if live_alerts:
+                context = f"{len(live_alerts)} alerts:\n" + "\n".join(a["message"] for a in live_alerts[:5])
+            else:
+                context = "Abhi koi alert nahi hai. Sab theek hai! ✅"
+        else:
+            context = f"{len(alerts)} unread alerts:\n" + "\n".join(f"• {a.message}" for a in alerts[:5])
+    except Exception as e:
+        context = f"Alerts error: {str(e)[:80]}"
+    finally:
+        db.close()
+    return {"context": context}
+
+
 def placeholder_node(state: GraphState):
-    """For market module (Phase 5+)."""
-    return {"context": "Market intelligence module Phase 5 mein aayega. Abhi ke liye RAG se answer de raha hoon."}
+    """Generic fallback."""
+    return {"context": "Yeh feature abhi available nahi hai. RAG se answer dene ki koshish karta hoon."}
 
 def synthesize_node(state: GraphState):
     """Uses Groq to generate the final natural language answer."""
     query = state["query"]
     context = state.get("context", "")
-
-    llm = ChatGroq(
-        api_key=settings.GROQ_API_KEY,
-        model_name="llama-3.1-8b-instant",
-        temperature=0.3
-    )
 
     prompt = f"""
     You are BusinessGPT, a helpful AI business consultant for Indian SME owners.
@@ -182,7 +245,7 @@ def synthesize_node(state: GraphState):
     User Query: {query}
     """
 
-    response = llm.invoke([SystemMessage(content=prompt)])
+    response = invoke_llm([SystemMessage(content=prompt)], temperature=0.3)
     return {"final_response": response.content}
 
 # Edge router
@@ -195,7 +258,11 @@ def route_intent(state: GraphState):
     elif intent == "inventory":
         return "inventory"
     elif intent == "market":
-        return "placeholder"
+        return "market"
+    elif intent == "health":
+        return "health"
+    elif intent == "alerts":
+        return "alerts"
     else:
         return "rag"   # rag + general
 
@@ -207,6 +274,9 @@ workflow.add_node("sql", sql_node)
 workflow.add_node("rag", rag_node)
 workflow.add_node("forecasting", forecasting_node)
 workflow.add_node("inventory", inventory_node)
+workflow.add_node("market", market_node)
+workflow.add_node("health", health_node)
+workflow.add_node("alerts", alerts_node)
 workflow.add_node("placeholder", placeholder_node)
 workflow.add_node("synthesize", synthesize_node)
 
@@ -220,6 +290,9 @@ workflow.add_conditional_edges(
         "rag": "rag",
         "forecasting": "forecasting",
         "inventory": "inventory",
+        "market": "market",
+        "health": "health",
+        "alerts": "alerts",
         "placeholder": "placeholder",
     }
 )
@@ -228,6 +301,9 @@ workflow.add_edge("sql", "synthesize")
 workflow.add_edge("rag", "synthesize")
 workflow.add_edge("forecasting", "synthesize")
 workflow.add_edge("inventory", "synthesize")
+workflow.add_edge("market", "synthesize")
+workflow.add_edge("health", "synthesize")
+workflow.add_edge("alerts", "synthesize")
 workflow.add_edge("placeholder", "synthesize")
 workflow.add_edge("synthesize", END)
 

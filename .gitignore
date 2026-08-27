@@ -21,13 +21,13 @@ ENV/
 *.env
 
 # ── Database & Persistent Storage ──
-backend/data/
+backend/app/data/
 *.db
 *.sqlite
 *.sqlite3
 
 # ── ChromaDB local data ──
-backend/data/chromadb/
+backend/app/data/chromadb/
 
 # ── Logs ──
 *.log
@@ -37,6 +37,7 @@ logs/
 .vscode/
 .idea/
 *.code-workspace
+.claude/
 
 # ── OS files ──
 .DS_Store

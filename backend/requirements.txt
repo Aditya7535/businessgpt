@@ -15,3 +15,9 @@ langgraph
 prophet
 xgboost
 scikit-learn
+pytrends
+newsapi-python
+apscheduler
+reportlab
+twilio
+langchain-ollama
