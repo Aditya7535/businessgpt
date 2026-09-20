@@ -106,7 +106,7 @@ def generate_pdf_report(db: Session, period: str = "monthly", period_label: str 
             cols = list(df.columns)
             date_col = _detect_col(cols, ["date", "order_date", "invoice_date", "month", "time"])
             sales_col = _detect_col(cols, ["sales", "revenue", "amount", "quantity", "units"])
-            product_col = _detect_col(cols, ["product", "item", "sku", "category"])
+            product_col = _detect_col(cols, ["product_name", "product", "item", "sku", "category"])
 
             if date_col and sales_col:
                 df[date_col] = pd.to_datetime(df[date_col], errors="coerce")

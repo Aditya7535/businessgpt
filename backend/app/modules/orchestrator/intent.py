@@ -33,7 +33,10 @@ def classify_intent(query: str) -> str:
             if v in intent:
                 return v
         return "general"
+    except RuntimeError as e:
+        # Groq unavailable — surface the reason in logs, default to general
+        print(f"[Intent] LLM unavailable: {e}")
+        return "general"
     except Exception as e:
-        print(f"Intent classification failed: {e}")
-        # Fallback to standard RAG on API failure
-        return "rag"
+        print(f"[Intent] Classification error: {e}")
+        return "general"

@@ -47,9 +47,11 @@ desktop.ini
 # ── Jupyter ──
 .ipynb_checkpoints/
 
-# ── Node (for future frontend) ──
+# ── Node ──
 node_modules/
 npm-debug.log*
+frontend/dist/
+*.timestamp*.mjs
 
 # ── Prophet / Stan compiled models ──
 *.pkl

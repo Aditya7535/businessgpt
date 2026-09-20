@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import List, Any, Dict
+from typing import List, Any, Dict, Optional
 
 class DatasetBase(BaseModel):
     filename: str
@@ -15,6 +15,7 @@ class DatasetResponse(DatasetBase):
     upload_date: datetime
     row_count: int
     columns: List[str]
-    
+    dataset_type: Optional[str] = "unknown"
+
     class Config:
         from_attributes = True

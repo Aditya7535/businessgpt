@@ -11,3 +11,5 @@ class Dataset(Base):
     row_count = Column(Integer)
     columns = Column(JSON)
     data = Column(JSON)
+    # Auto-detected type: 'sales' | 'customers' | 'inventory' | 'financial' | 'unknown'
+    dataset_type = Column(String, default="unknown", nullable=False, server_default="unknown")

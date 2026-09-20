@@ -1,0 +1,51 @@
+services:
+  # ─── FastAPI Backend Web Service ─────────────────────────
+  - type: web
+    name: businessgpt-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: businessgpt-db
+          property: connectionString
+      - key: GROQ_API_KEY
+        sync: false
+      - key: NEWSAPI_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_NUMBER
+        value: "whatsapp:+14155238886"
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: FRONTEND_URL
+        sync: false
+
+  # ─── React Frontend Static Site ─────────────────────────
+  - type: web
+    name: businessgpt-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: "npm install && npm run build"
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+
+databases:
+  # ─── Managed PostgreSQL Database ────────────────────────
+  - name: businessgpt-db
+    databaseName: businessgpt
+    user: businessgpt_user
+    plan: free

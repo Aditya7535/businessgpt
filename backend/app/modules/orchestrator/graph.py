@@ -114,8 +114,8 @@ def inventory_node(state: GraphState):
 
         columns = list(latest_dataset.data[0].keys())
         date_col = _detect_col(columns, ["date", "order_date", "invoice_date", "month", "time"])
-        sales_col = _detect_col(columns, ["sales", "revenue", "quantity", "units", "amount", "qty"])
-        product_col = _detect_col(columns, ["product", "item", "sku", "category", "product_name"])
+        sales_col = _detect_col(columns, ["quantity", "units", "qty", "sales", "revenue", "amount"])
+        product_col = _detect_col(columns, ["product_name", "product", "item", "sku", "category"])
         stock_col = _detect_col(columns, ["stock", "current_stock", "inventory", "on_hand"])
         price_col = _detect_col(columns, ["price", "unit_price", "rate", "mrp", "cost"])
 
@@ -228,16 +228,19 @@ def placeholder_node(state: GraphState):
     return {"context": "Yeh feature abhi available nahi hai. RAG se answer dene ki koshish karta hoon."}
 
 def synthesize_node(state: GraphState):
-    """Uses Groq to generate the final natural language answer."""
+    """Uses Groq to generate the final natural language answer in Hinglish (Latin/English script)."""
     query = state["query"]
     context = state.get("context", "")
 
     prompt = f"""
-    You are BusinessGPT, a helpful AI business consultant for Indian SME owners.
-    Answer the user's query based ONLY on the provided context.
-    If the context mentions a feature is coming, politely say so.
-    Reply in the same language the user used (English, Hindi, or Hinglish).
-    Be concise, friendly, and actionable.
+    You are BusinessGPT, a smart, friendly, and practical AI business advisor for Indian SME (Small and Medium Enterprise) owners.
+    
+    CRITICAL LANGUAGE & SCRIPT RULES (MANDATORY):
+    1. ALWAYS RESPOND IN HINGLISH: Mix conversational Hindi and English naturally (e.g., "Aapka business health score badhiya chal raha hai", "Thoda stock reorder karna padega", "Total revenue ₹50,000 badh gaya hai").
+    2. STRICTLY USE ENGLISH ALPHABET ONLY: Write everything using the Latin / English alphabet (Roman script).
+    3. ABSOLUTELY NO DEVANAGARI SCRIPT: Never use Hindi/Devanagari characters (DO NOT write 'नमस्ते', 'बिक्री', 'व्यापार', 'स्टॉक'). Always spell Hindi words phonetically in English letters (e.g. write "Namaste", "sales", "business", "stock", "kam hai", "badha sakte hain").
+    4. Keep the tone warm, encouraging, concise, and actionable for an Indian business owner.
+    5. Answer the user's query based on the provided context. If the context mentions a feature is missing or coming, politely say so in Hinglish.
     
     Context:
     {context}
@@ -245,8 +248,40 @@ def synthesize_node(state: GraphState):
     User Query: {query}
     """
 
-    response = invoke_llm([SystemMessage(content=prompt)], temperature=0.3)
-    return {"final_response": response.content}
+    try:
+        response = invoke_llm([SystemMessage(content=prompt)], temperature=0.3)
+        response_text = response.content
+
+        # Failsafe: Ensure zero Devanagari script appears in output
+        import re
+        if re.search(r'[\u0900-\u097F]', response_text):
+            fix_prompt = (
+                "Rewrite the following text into conversational HINGLISH written STRICTLY using the ENGLISH / LATIN ALPHABET. "
+                "DO NOT USE ANY DEVANAGARI HINDI SCRIPT:\n\n"
+                f"{response_text}"
+            )
+            converted = invoke_llm([SystemMessage(content=fix_prompt)], temperature=0.2)
+            if not re.search(r'[\u0900-\u097F]', converted.content):
+                response_text = converted.content
+
+        return {"final_response": response_text}
+    except RuntimeError as e:
+        # Groq unavailable — return context directly with a note
+        error_hint = str(e)
+        if context and context.strip():
+            # We have data — return it raw so user still gets value
+            fallback = (
+                f"⚠️ AI response generation abhi unavailable hai ({error_hint})\n\n"
+                f"Raw data:\n\n{context}"
+            )
+        else:
+            fallback = (
+                f"⚠️ Abhi AI service unavailable hai ({error_hint}). "
+                "Please thodi der baad try karein."
+            )
+        return {"final_response": fallback}
+    except Exception as e:
+        return {"final_response": f"⚠️ Unexpected error: {str(e)[:200]}"}
 
 # Edge router
 def route_intent(state: GraphState):

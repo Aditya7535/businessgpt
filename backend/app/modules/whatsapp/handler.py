@@ -88,18 +88,20 @@ async def handle_command(command: str, db: Session) -> str:
                 return "⚠️ Pehle data upload karein!"
             cols = list(latest.data[0].keys())
             date_col = _detect_col(cols, ['date', 'order_date', 'invoice_date', 'month'])
-            sales_col = _detect_col(cols, ['sales', 'revenue', 'quantity', 'units', 'amount'])
-            product_col = _detect_col(cols, ['product', 'item', 'sku', 'category'])
+            sales_col = _detect_col(cols, ['quantity', 'units', 'qty', 'sales', 'revenue', 'amount'])
+            product_col = _detect_col(cols, ['product_name', 'product', 'item', 'sku', 'category'])
             analysis = analyze_all_products(latest.data, date_col, sales_col, product_col)
             return format_low_stock({'analysis': analysis})
         except Exception as e:
             return f"⚠️ Inventory error: {str(e)[:80]}"
 
     elif cmd == '/report':
+        from app.core.config import settings
+        url = f"{settings.FRONTEND_URL.rstrip('/')}/reports"
         return (
             "📄 *Report Generate Karo*\n\n"
             "Report generate karne ke liye:\n"
-            "1. BusinessGPT web app kholein: http://localhost:3000/reports\n"
+            f"1. BusinessGPT web app kholein: {url}\n"
             "2. 'Download Monthly Report' pe click karein\n\n"
             "PDF download ho jayega! 📥"
         )

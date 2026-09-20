@@ -3,18 +3,20 @@ from langchain_chroma import Chroma
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_core.documents import Document
 
+from app.core.config import settings
+
 # Define path for Chroma persistent storage
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__))) # backend/app
-CHROMA_PERSIST_DIR = os.path.join(os.path.dirname(BASE_DIR), "data", "chromadb")
+CHROMA_PERSIST_DIR = settings.CHROMA_PERSIST_DIR if settings.CHROMA_PERSIST_DIR else os.path.join(os.path.dirname(BASE_DIR), "data", "chromadb")
 
 def get_vector_store():
     """
     Initializes and returns the Chroma vector store connected to Ollama embeddings.
     """
-    # Initialize local embeddings via Ollama (nomic-embed-text)
+    # Initialize embeddings via Ollama (nomic-embed-text)
     embeddings = OllamaEmbeddings(
-        model="nomic-embed-text",
-        base_url="http://localhost:11434"
+        model=os.getenv("OLLAMA_MODEL", "nomic-embed-text"),
+        base_url=settings.OLLAMA_BASE_URL
     )
     
     # Initialize Chroma persistent client

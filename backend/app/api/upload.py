@@ -8,6 +8,23 @@ from app.modules.rag.embeddings import embed_dataset
 
 router = APIRouter()
 
+SALES_KEYWORDS     = {"sales", "revenue", "amount", "profit", "income", "net_sales", "sale_price"}
+INVENTORY_KEYWORDS = {"stock", "inventory", "quantity", "stock_quantity", "on_hand", "qty"}
+GENERAL_KEYWORDS   = {"product", "category", "price", "item", "sku", "brand", "description"}
+
+def detect_dataset_type(columns: list[str]) -> str:
+    """Infer dataset type from column names.
+    Priority: sales > inventory > general > unknown
+    """
+    lower_cols = {c.lower() for c in columns}
+    if lower_cols & SALES_KEYWORDS:
+        return "sales"
+    if lower_cols & INVENTORY_KEYWORDS:
+        return "inventory"
+    if lower_cols & GENERAL_KEYWORDS:
+        return "general"
+    return "unknown"
+
 @router.post("/upload", response_model=DatasetResponse)
 async def upload_dataset(background_tasks: BackgroundTasks, file: UploadFile = File(...), db: Session = Depends(get_db)):
     content = await file.read()
@@ -27,12 +44,16 @@ async def upload_dataset(background_tasks: BackgroundTasks, file: UploadFile = F
     columns = list(cleaned_data[0].keys()) if row_count > 0 else []
     data = cleaned_data
     
+    # Auto-detect dataset type from column names
+    dataset_type = detect_dataset_type(columns)
+
     # Save metadata and JSON data to PostgreSQL
     new_dataset = Dataset(
         filename=file.filename,
         row_count=row_count,
         columns=columns,
-        data=data
+        data=data,
+        dataset_type=dataset_type
     )
     
     db.add(new_dataset)

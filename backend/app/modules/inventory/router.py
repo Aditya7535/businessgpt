@@ -39,8 +39,8 @@ async def analyze_inventory(request: InventoryRequest, db: Session = Depends(get
 
     columns = list(raw_data[0].keys())
     date_col = _detect_col(columns, ["date", "order_date", "invoice_date", "month", "time"])
-    sales_col = _detect_col(columns, ["sales", "revenue", "quantity", "units", "amount", "qty"])
-    product_col = _detect_col(columns, ["product", "item", "sku", "category", "product_name"])
+    sales_col = _detect_col(columns, ["quantity", "units", "qty", "sales", "revenue", "amount"])
+    product_col = _detect_col(columns, ["product_name", "product", "item", "sku", "category"])
     stock_col = _detect_col(columns, ["stock", "current_stock", "inventory", "on_hand", "quantity_on_hand"])
     price_col = _detect_col(columns, ["price", "unit_price", "rate", "mrp", "cost"])
 
@@ -84,8 +84,8 @@ async def get_alerts(dataset_id: Optional[int] = None, db: Session = Depends(get
     columns = list(raw_data[0].keys())
 
     date_col = _detect_col(columns, ["date", "order_date", "invoice_date", "month", "time"])
-    sales_col = _detect_col(columns, ["sales", "revenue", "quantity", "units", "amount", "qty"])
-    product_col = _detect_col(columns, ["product", "item", "sku", "category", "product_name"])
+    sales_col = _detect_col(columns, ["quantity", "units", "qty", "sales", "revenue", "amount"])
+    product_col = _detect_col(columns, ["product_name", "product", "item", "sku", "category"])
     stock_col = _detect_col(columns, ["stock", "current_stock", "inventory", "on_hand"])
     price_col = _detect_col(columns, ["price", "unit_price", "rate", "mrp", "cost"])
 

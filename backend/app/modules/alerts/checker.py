@@ -44,8 +44,8 @@ def check_inventory_alerts(db: Session) -> List[Dict]:
 
         columns = list(latest.data[0].keys())
         date_col = _detect_col(columns, ["date", "order_date", "invoice_date", "month", "time"])
-        sales_col = _detect_col(columns, ["sales", "revenue", "quantity", "units", "amount", "qty"])
-        product_col = _detect_col(columns, ["product", "item", "sku", "category", "product_name"])
+        sales_col = _detect_col(columns, ["quantity", "units", "qty", "sales", "revenue", "amount"])
+        product_col = _detect_col(columns, ["product_name", "product", "item", "sku", "category"])
 
         if not date_col or not sales_col or not product_col:
             return alerts

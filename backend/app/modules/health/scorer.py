@@ -118,7 +118,7 @@ def compute_health_score(db: Session) -> Dict:
     from app.modules.inventory.router import _detect_col
     date_col = _detect_col(columns, ["date", "order_date", "invoice_date", "month", "time"])
     sales_col = _detect_col(columns, ["sales", "revenue", "amount", "quantity", "units"])
-    product_col = _detect_col(columns, ["product", "item", "sku", "category", "product_name"])
+    product_col = _detect_col(columns, ["product_name", "product", "item", "sku", "category"])
 
     if not date_col or not sales_col:
         return {
@@ -141,9 +141,10 @@ def compute_health_score(db: Session) -> Dict:
     inv_score = 25  # default
     try:
         from app.modules.inventory.engine import analyze_all_products
+        qty_col = _detect_col(columns, ["quantity", "units", "qty", "sales", "revenue", "amount"])
         results = analyze_all_products(
             data=latest.data, date_col=date_col,
-            sales_col=sales_col, product_col=product_col or ""
+            sales_col=qty_col, product_col=product_col or ""
         )
         from app.modules.inventory.health_score import compute_inventory_health_score
         inv_health = compute_inventory_health_score(results)

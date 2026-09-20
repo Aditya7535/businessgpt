@@ -147,5 +147,5 @@ def format_welcome(phone: str) -> str:
         "/forecast → Sales Forecast\n"
         "/stock   → Low Stock Items\n"
         "/report  → Business Report\n\n"
-        "Ya koi bhi sawaal poochho Hindi/English mein! 🙏"
+        "Ya koi bhi sawaal poochho Hinglish mein! 🙏"
     )

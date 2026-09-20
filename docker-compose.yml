@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  # ─── 1. PostgreSQL Database ─────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: businessgpt-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      POSTGRES_DB: ${POSTGRES_DB:-businessgpt}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-businessgpt}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── 2. FastAPI Backend ─────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: businessgpt-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql+pg8000://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres123}@db:5432/${POSTGRES_DB:-businessgpt}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - NEWSAPI_KEY=${NEWSAPI_KEY}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - TWILIO_WHATSAPP_NUMBER=${TWILIO_WHATSAPP_NUMBER}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - CHROMA_PERSIST_DIR=/app/data/chromadb
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - CORS_ORIGINS=*
+    volumes:
+      - chromadata:/app/data/chromadb
+    ports:
+      - "8000:8000"
+
+  # ─── 3. React Frontend (Nginx) ──────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: businessgpt-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+  # ─── 4. Optional Ollama (Local Embeddings) ──────────────
+  # Run with: docker compose --profile with-ollama up -d
+  ollama:
+    image: ollama/ollama:latest
+    container_name: businessgpt-ollama
+    restart: unless-stopped
+    profiles: ["with-ollama"]
+    volumes:
+      - ollamadata:/root/.ollama
+    ports:
+      - "11434:11434"
+
+volumes:
+  pgdata:
+  chromadata:
+  ollamadata:
