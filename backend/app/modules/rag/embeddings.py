@@ -53,5 +53,8 @@ def embed_dataset(data: list[dict], filename: str):
         
     # Add documents to the vector store (ChromaDB handles the API calls to Ollama)
     if documents:
-        vector_store.add_documents(documents)
-        print(f"Successfully embedded {len(documents)} rows from {filename} into ChromaDB.")
+        try:
+            vector_store.add_documents(documents)
+            print(f"Successfully embedded {len(documents)} rows from {filename} into ChromaDB.")
+        except Exception as e:
+            print(f"[Warning] Ollama embedding skipped for {filename}: {e}")

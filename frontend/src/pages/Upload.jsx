@@ -30,9 +30,10 @@ export default function UploadPage() {
   const [progress, setProgress] = useState(0)
   const [status, setStatus] = useState('idle') // idle | uploading | success | error
   const [result, setResult] = useState(null)
+  const [errorMessage, setErrorMessage] = useState('')
 
   const onDrop = useCallback((accepted) => {
-    if (accepted[0]) { setFile(accepted[0]); setStatus('idle'); setResult(null); setProgress(0) }
+    if (accepted[0]) { setFile(accepted[0]); setStatus('idle'); setResult(null); setProgress(0); setErrorMessage('') }
   }, [])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -45,6 +46,7 @@ export default function UploadPage() {
     if (!file) return
     setStatus('uploading')
     setProgress(0)
+    setErrorMessage('')
     try {
       const res = await uploadFile(file, setProgress)
       setResult(res.data)
@@ -52,7 +54,9 @@ export default function UploadPage() {
       toast.success(`${res.data.row_count} rows uploaded successfully!`)
     } catch (err) {
       setStatus('error')
-      toast.error(err.response?.data?.detail ?? 'Upload failed')
+      const msg = err.response?.data?.detail || err.message || 'Upload failed. Check if backend is running.'
+      setErrorMessage(msg)
+      toast.error(msg)
     }
   }
 
@@ -139,7 +143,7 @@ export default function UploadPage() {
           <XCircle className="w-6 h-6 text-red-500 flex-shrink-0" />
           <div>
             <p className="font-semibold text-red-800">Upload Failed</p>
-            <p className="text-sm text-red-600">Please check file format and try again.</p>
+            <p className="text-sm text-red-600">{errorMessage || 'Please check file format and try again.'}</p>
           </div>
         </div>
       )}
