@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
@@ -19,9 +20,12 @@ def _normalize_database_url(url: str) -> str:
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "BusinessGPT"
-    DATABASE_URL: str = _normalize_database_url(
-        os.getenv("DATABASE_URL", "postgresql+pg8000://postgres:postgres@localhost:5432/businessgpt")
-    )
+    DATABASE_URL: str = "postgresql+pg8000://postgres:postgres@localhost:5432/businessgpt"
+
+    @field_validator("DATABASE_URL", mode="after")
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
+        return _normalize_database_url(v)
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "").strip()
     NEWSAPI_KEY: str = os.getenv("NEWSAPI_KEY", "").strip()
     # Twilio — Phase 7
