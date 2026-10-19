@@ -155,6 +155,28 @@ def generate_fallback_sql(query: str, db=None) -> str:
     return "SELECT MIN(date) as from_date, MAX(date) as to_date, COALESCE(SUM(revenue), 0) as total_revenue, COALESCE(SUM(quantity_sold), 0) as total_units, COALESCE(SUM(revenue - cost), 0) as gross_profit FROM sales_data;"
 
 
+def adapt_sql_for_dialect(sql: str, db) -> str:
+    """Adapts PostgreSQL-specific syntax to SQLite if running on SQLite."""
+    if not sql:
+        return sql
+    try:
+        bind = getattr(db, "bind", None)
+        dialect = bind.dialect.name if bind and hasattr(bind, "dialect") else "postgresql"
+    except Exception:
+        dialect = "postgresql"
+
+    if dialect == "sqlite":
+        # 1. ILIKE -> LIKE
+        sql = re.sub(r"\bILIKE\b", "LIKE", sql, flags=re.IGNORECASE)
+        # 2. Type casting ::type
+        sql = re.sub(r"::\s*[a-zA-Z_]+", "", sql)
+        # 3. Date INTERVAL arithmetic
+        sql = re.sub(r"-\s*INTERVAL\s*'(\d+)\s*days?'", r"- \1", sql, flags=re.IGNORECASE)
+        # 4. GREATEST -> MAX
+        sql = re.sub(r"\bGREATEST\b", "MAX", sql, flags=re.IGNORECASE)
+    return sql
+
+
 def run_text_to_sql(user_query: str) -> Dict[str, Any]:
     """
     Complete pipeline:
@@ -194,8 +216,9 @@ def run_text_to_sql(user_query: str) -> Dict[str, Any]:
         print(f"\n[Text-to-SQL] Source: {source_name} | SQL: {sql_generated}\n", flush=True)
         logger.info(f"[Text-to-SQL] User Query: {user_query} | Source: {source_name} | Generated SQL: {sql_generated}")
 
-        # Execute query safely
-        result = db.execute(text(sql_generated))
+        # Adapt SQL for SQLite if applicable and execute query safely
+        sql_to_run = adapt_sql_for_dialect(sql_generated, db)
+        result = db.execute(text(sql_to_run))
         columns = list(result.keys()) if result.returns_rows else []
         rows = [dict(zip(columns, row)) for row in result.fetchall()] if result.returns_rows else []
 

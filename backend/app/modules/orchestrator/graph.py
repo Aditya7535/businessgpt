@@ -115,22 +115,39 @@ def inventory_node(state: GraphState):
     query = state["query"]
     db = SessionLocal()
     try:
-        from sqlalchemy import text
-        reorder_query = text("""
-            SELECT 
-                p.id, p.name, p.sku, p.category, p.current_stock, p.reorder_point, p.unit, p.unit_price,
-                COALESCE(SUM(s.quantity_sold), 0) AS units_sold_30d,
-                ROUND(COALESCE(SUM(s.quantity_sold)::numeric / 30.0, 0), 2) AS avg_daily_demand,
-                CASE WHEN COALESCE(SUM(s.quantity_sold), 0) > 0 
-                     THEN ROUND(p.current_stock::numeric / (SUM(s.quantity_sold)::numeric / 30.0), 1)
-                     ELSE 999.0 END AS days_left,
-                GREATEST(0, p.reorder_point - p.current_stock) AS stock_shortage
-            FROM products p
-            LEFT JOIN sales_data s ON p.id = s.product_id AND s.date >= (SELECT MAX(date) FROM sales_data) - INTERVAL '30 days'
-            GROUP BY p.id, p.name, p.sku, p.category, p.current_stock, p.reorder_point, p.unit, p.unit_price
-            ORDER BY CASE WHEN p.current_stock <= p.reorder_point THEN 0 ELSE 1 END, days_left ASC, stock_shortage DESC
-            LIMIT 50;
-        """)
+        is_sqlite = db.bind.dialect.name == "sqlite"
+        if is_sqlite:
+            reorder_query = text("""
+                SELECT 
+                    p.id, p.name, p.sku, p.category, p.current_stock, p.reorder_point, p.unit, p.unit_price,
+                    COALESCE(SUM(s.quantity_sold), 0) AS units_sold_30d,
+                    ROUND(COALESCE(SUM(s.quantity_sold) * 1.0 / 30.0, 0), 2) AS avg_daily_demand,
+                    CASE WHEN COALESCE(SUM(s.quantity_sold), 0) > 0 
+                         THEN ROUND(p.current_stock * 1.0 / (SUM(s.quantity_sold) * 1.0 / 30.0), 1)
+                         ELSE 999.0 END AS days_left,
+                    MAX(0, p.reorder_point - p.current_stock) AS stock_shortage
+                FROM products p
+                LEFT JOIN sales_data s ON p.id = s.product_id AND s.date >= date((SELECT MAX(date) FROM sales_data), '-30 days')
+                GROUP BY p.id, p.name, p.sku, p.category, p.current_stock, p.reorder_point, p.unit, p.unit_price
+                ORDER BY CASE WHEN p.current_stock <= p.reorder_point THEN 0 ELSE 1 END, days_left ASC, stock_shortage DESC
+                LIMIT 50;
+            """)
+        else:
+            reorder_query = text("""
+                SELECT 
+                    p.id, p.name, p.sku, p.category, p.current_stock, p.reorder_point, p.unit, p.unit_price,
+                    COALESCE(SUM(s.quantity_sold), 0) AS units_sold_30d,
+                    ROUND(COALESCE(SUM(s.quantity_sold)::numeric / 30.0, 0), 2) AS avg_daily_demand,
+                    CASE WHEN COALESCE(SUM(s.quantity_sold), 0) > 0 
+                         THEN ROUND(p.current_stock::numeric / (SUM(s.quantity_sold)::numeric / 30.0), 1)
+                         ELSE 999.0 END AS days_left,
+                    GREATEST(0, p.reorder_point - p.current_stock) AS stock_shortage
+                FROM products p
+                LEFT JOIN sales_data s ON p.id = s.product_id AND s.date >= (SELECT MAX(date) FROM sales_data) - INTERVAL '30 days'
+                GROUP BY p.id, p.name, p.sku, p.category, p.current_stock, p.reorder_point, p.unit, p.unit_price
+                ORDER BY CASE WHEN p.current_stock <= p.reorder_point THEN 0 ELSE 1 END, days_left ASC, stock_shortage DESC
+                LIMIT 50;
+            """)
         result = db.execute(reorder_query)
         columns = list(result.keys())
         rows = [dict(zip(columns, row)) for row in result.fetchall()]

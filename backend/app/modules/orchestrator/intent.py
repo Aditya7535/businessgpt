@@ -30,7 +30,8 @@ def classify_intent(query: str) -> str:
     stock_price_keywords = [
         "stock", "price", "rate", "mrp", "cost", "bhav", "keemat", "kimat",
         "available", "bacha", "kitna hai", "kitne hain", "critical stock",
-        "low stock", "out of stock", "reorder", "inventory", "sales", "revenue", "kamai", "bikri", "total"
+        "low stock", "out of stock", "reorder", "inventory", "sales", "revenue", "kamai", "bikri", "total",
+        "mangwaye", "mangwao", "mangwana", "order kare", "order karein", "order karna", "kharide", "khatam", "shortage"
     ]
 
     has_product = any(p in q_lower for p in product_keywords)
