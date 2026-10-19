@@ -13,3 +13,4 @@ class Dataset(Base):
     data = Column(JSON)
     # Auto-detected type: 'sales' | 'customers' | 'inventory' | 'financial' | 'unknown'
     dataset_type = Column(String, default="unknown", nullable=False, server_default="unknown")
+    table_name = Column(String(100), nullable=True, index=True)

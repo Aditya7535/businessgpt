@@ -22,12 +22,15 @@ ENV/
 
 # ── Database & Persistent Storage ──
 backend/app/data/
+backend/data/
+data/
+chroma_db/
 *.db
 *.sqlite
 *.sqlite3
-
-# ── ChromaDB local data ──
-backend/app/data/chromadb/
+*.bin
+*.pickle
+*.parquet
 
 # ── Logs ──
 *.log

@@ -1,142 +1,298 @@
-import { useState, useEffect } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line } from 'recharts'
+import React, { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
+import { analyticsAPI } from '../services/api'
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend
+} from 'recharts'
+import {
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  ShoppingBag,
+  Percent,
+  Calendar,
+  Layers,
+  ArrowUpRight,
+  ArrowDownRight
+} from 'lucide-react'
 import toast from 'react-hot-toast'
-import { getForecast, analyzeInventory } from '../services/api'
-
-const COLORS = ['#2563eb', '#7c3aed', '#10b981', '#f59e0b', '#ef4444', '#06b6d4']
-const STATUS_BADGE = {
-  OPTIMAL:   'badge-green',
-  LOW_STOCK: 'badge-yellow',
-  CRITICAL:  'badge-red',
-  OVERSTOCK: 'badge-blue',
-}
 
 export default function Analytics() {
-  const [forecast, setForecast] = useState(null)
-  const [inventory, setInventory] = useState(null)
-  const [horizon, setHorizon] = useState('month')
-  const [loadingF, setLoadingF] = useState(false)
-  const [loadingI, setLoadingI] = useState(true)
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [days, setDays] = useState(30)
 
-  const loadForecast = async (h) => {
-    setLoadingF(true)
-    try {
-      const res = await getForecast(h)
-      setForecast(res.data)
-    } catch { toast.error('Forecast load failed') }
-    finally { setLoadingF(false) }
-  }
-
-  const loadInventory = async () => {
-    try {
-      const res = await analyzeInventory()
-      setInventory(res.data)
-    } catch {} finally { setLoadingI(false) }
-  }
-
-  useEffect(() => { loadForecast(horizon); loadInventory() }, [])
-
-  const forecastChart = forecast?.forecast?.slice(0, 30).map((d, i) => ({
-    date: d.ds ? d.ds.slice(5, 10) : `D${i+1}`,
-    forecast: Math.round(d.yhat ?? 0),
-    upper: Math.round(d.yhat_upper ?? 0),
-    lower: Math.round(d.yhat_lower ?? 0),
-  })) ?? []
-
-  const inventoryChart = inventory?.analysis?.filter(a => !a.error).map(a => ({
-    name: a.product?.slice(0, 12),
-    stock: a.current_stock,
-    reorder: a.reorder_point,
-    status: a.status,
-  })) ?? []
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        setLoading(true)
+        const res = await analyticsAPI.getSummary(days)
+        setData(res.data)
+      } catch (err) {
+        toast.error('Failed to load analytics data.')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchAnalytics()
+  }, [days])
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
-      {/* Forecast Section */}
-      <div className="card">
-        <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
-          <div>
-            <h3 className="font-bold text-gray-900">Sales Forecast</h3>
-            <p className="text-sm text-gray-500">AI-powered demand prediction with confidence intervals</p>
-          </div>
-          <div className="flex gap-2">
-            {['week', 'month', 'quarter'].map(h => (
-              <button key={h} onClick={() => { setHorizon(h); loadForecast(h) }}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium capitalize transition-all ${horizon === h ? 'bg-primary-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-primary-300'}`}>
-                {h}
-              </button>
-            ))}
-          </div>
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.15 }}
+      className="space-y-6"
+    >
+      {/* Top Header & Range Filter */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-[var(--text-main)] flex items-center gap-2">
+            <TrendingUp size={20} className="text-blue-500" />
+            Financial & Sales Analytics
+          </h1>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            Pre-aggregated daily sales intelligence, Prophet forecasting, and margin analysis.
+          </p>
         </div>
-        {loadingF ? <div className="skeleton h-56 w-full" /> : forecastChart.length ? (
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={forecastChart}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-              <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-              <Tooltip contentStyle={{ borderRadius: '12px', fontSize: 12 }} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line dataKey="forecast" stroke="#2563eb" strokeWidth={2.5} dot={false} name="Forecast" />
-              <Line dataKey="upper" stroke="#93c5fd" strokeWidth={1} dot={false} strokeDasharray="4 2" name="Upper" />
-              <Line dataKey="lower" stroke="#bfdbfe" strokeWidth={1} dot={false} strokeDasharray="4 2" name="Lower" />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : <p className="text-center text-gray-400 py-16 text-sm">Upload sales data to see forecast</p>}
-        {forecast && (
-          <div className="mt-3 flex flex-wrap gap-3 text-xs text-gray-500">
-            <span>Model: <b className="text-gray-700">{forecast.model_used}</b></span>
-            <span>Rows: <b className="text-gray-700">{forecast.data_points}</b></span>
-            <span>Narrative: <b className="text-gray-700 italic">{forecast.narrative?.slice(0, 80)}...</b></span>
-          </div>
-        )}
+
+        {/* Date Range Selector */}
+        <div className="flex items-center gap-1.5 p-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)]">
+          {[
+            { label: '7D', value: 7 },
+            { label: '30D', value: 30 },
+            { label: '60D', value: 60 },
+            { label: '90D', value: 90 },
+          ].map((r) => (
+            <button
+              key={r.value}
+              onClick={() => setDays(r.value)}
+              className={`px-3 py-1 rounded-md text-xs font-mono font-medium transition-all cursor-pointer ${
+                days === r.value
+                  ? 'bg-blue-600 text-white font-bold shadow-sm'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+              }`}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Inventory Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="card">
-          <h3 className="font-bold text-gray-900 mb-4">Stock Levels vs Reorder Point</h3>
-          {loadingI ? <div className="skeleton h-48 w-full" /> : inventoryChart.length ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={inventoryChart}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                <Tooltip contentStyle={{ borderRadius: '12px', fontSize: 12 }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="stock" fill="#2563eb" radius={[4,4,0,0]} name="Current Stock" />
-                <Bar dataKey="reorder" fill="#fca5a5" radius={[4,4,0,0]} name="Reorder Point" />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : <p className="text-center text-gray-400 py-12 text-sm">No inventory data</p>}
-        </div>
-
-        <div className="card">
-          <h3 className="font-bold text-gray-900 mb-4">Product Status</h3>
-          {loadingI ? <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="skeleton h-10 rounded-xl" />)}</div> :
-            inventory?.analysis?.filter(a => !a.error).length ? (
-              <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                {inventory.analysis.filter(a => !a.error).map(a => (
-                  <div key={a.product} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:bg-gray-50">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{a.product}</p>
-                      <p className="text-xs text-gray-500">{a.days_remaining} days remaining · {a.demand_classification}</p>
-                    </div>
-                    <span className={`badge ${STATUS_BADGE[a.status] ?? 'badge-gray'}`}>{a.status}</span>
-                  </div>
-                ))}
-              </div>
-            ) : <p className="text-center text-gray-400 py-12 text-sm">No inventory data</p>}
-          {inventory?.health_score && (
-            <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2 text-sm">
-              <span className="text-gray-500">Inventory Health:</span>
-              <span className="font-bold text-gray-900">{inventory.health_score.score}/100</span>
-              <span className={`badge ${inventory.health_score.grade === 'A' ? 'badge-green' : inventory.health_score.grade === 'B' ? 'badge-blue' : 'badge-red'}`}>
-                {inventory.health_score.grade}
+      {/* KPI Cards */}
+      {data && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Revenue */}
+          <div className="p-4 os-surface flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-[var(--text-muted)] font-medium">Total Revenue</span>
+              <span
+                className={`text-[10px] font-mono px-2 py-0.5 rounded-full flex items-center gap-0.5 ${
+                  data.mom_growth >= 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'
+                }`}
+              >
+                {data.mom_growth >= 0 ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
+                {data.mom_growth > 0 ? `+${data.mom_growth}%` : `${data.mom_growth}%`} MoM
               </span>
             </div>
+            <div className="text-2xl font-bold font-mono text-[var(--text-main)] mt-2">
+              ₹{data.total_revenue.toLocaleString('en-IN')}
+            </div>
+          </div>
+
+          {/* Gross Profit */}
+          <div className="p-4 os-surface flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-[var(--text-muted)] font-medium">Gross Profit</span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 font-semibold">
+                {data.profit_margin}% Margin
+              </span>
+            </div>
+            <div className="text-2xl font-bold font-mono text-emerald-500 mt-2">
+              ₹{data.gross_profit.toLocaleString('en-IN')}
+            </div>
+          </div>
+
+          {/* Total Units Sold */}
+          <div className="p-4 os-surface flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-[var(--text-muted)] font-medium">Units Sold</span>
+              <ShoppingBag size={14} className="text-[var(--text-muted)]" />
+            </div>
+            <div className="text-2xl font-bold font-mono text-[var(--text-main)] mt-2">
+              {data.total_units_sold.toLocaleString('en-IN')}
+            </div>
+          </div>
+
+          {/* Total Bills / Transactions */}
+          <div className="p-4 os-surface flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-[var(--text-muted)] font-medium">Customer Bills</span>
+              <span className="text-[10px] font-mono text-[var(--text-muted)]">Completed</span>
+            </div>
+            <div className="text-2xl font-bold font-mono text-[var(--text-main)] mt-2">
+              {data.total_bills}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Revenue Chart: Actual vs Forecast */}
+      <div className="os-surface p-5 space-y-3">
+        <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+          <div>
+            <h2 className="text-sm font-bold text-[var(--text-main)]">Daily Revenue: Actual vs ML Forecast</h2>
+            <p className="text-[11px] text-[var(--text-muted)]">
+              Historical actual performance plotted with forward 7-day Prophet & XGBoost trendline.
+            </p>
+          </div>
+          <div className="flex items-center gap-4 text-xs font-mono">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+              <span className="text-[var(--text-main)]">Actual Revenue</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+              <span className="text-[var(--text-main)]">ML Forecast</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="h-72 w-full">
+          {loading ? (
+            <div className="h-full w-full bg-[var(--bg-surface-elevated)] animate-pulse rounded-lg" />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data?.daily_trend || []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(156, 163, 175, 0.15)" />
+                <XAxis dataKey="date" stroke="#9CA3AF" fontSize={11} tickLine={false} />
+                <YAxis
+                  stroke="#9CA3AF"
+                  fontSize={11}
+                  tickLine={false}
+                  tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k`}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#111111',
+                    borderColor: '#333333',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    color: '#F3F4F6',
+                    fontFamily: 'monospace'
+                  }}
+                  formatter={(val) => [`₹${Number(val).toLocaleString('en-IN')}`, '']}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="actual"
+                  name="Actual (₹)"
+                  stroke="#2563EB"
+                  strokeWidth={2.5}
+                  dot={{ r: 2 }}
+                  activeDot={{ r: 5 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="forecast"
+                  name="Forecast (₹)"
+                  stroke="#A855F7"
+                  strokeWidth={2}
+                  strokeDasharray="4 4"
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
           )}
         </div>
       </div>
-    </div>
+
+      {/* Grid: Top Products Bar Chart & Category Breakdown Table */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Top Products Bar Chart */}
+        <div className="os-surface p-5 space-y-3">
+          <div className="border-b border-[var(--border-color)] pb-3">
+            <h2 className="text-sm font-bold text-[var(--text-main)]">Top Products by Revenue</h2>
+            <p className="text-[11px] text-[var(--text-muted)]">Highest grossing items in current window.</p>
+          </div>
+
+          <div className="h-64 w-full">
+            {loading ? (
+              <div className="h-full w-full bg-[var(--bg-surface-elevated)] animate-pulse rounded-lg" />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={data?.top_products || []}
+                  layout="vertical"
+                  margin={{ top: 5, right: 20, left: 40, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(156, 163, 175, 0.15)" />
+                  <XAxis type="number" stroke="#9CA3AF" fontSize={11} tickFormatter={(val) => `₹${val / 1000}k`} />
+                  <YAxis type="category" dataKey="name" stroke="#9CA3AF" fontSize={10} width={100} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#111111',
+                      borderColor: '#333333',
+                      borderRadius: '8px',
+                      fontSize: '11px',
+                      fontFamily: 'monospace'
+                    }}
+                    formatter={(val) => [`₹${Number(val).toLocaleString('en-IN')}`, 'Revenue']}
+                  />
+                  <Bar dataKey="revenue" fill="#2563EB" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        {/* Category Breakdown Table (Clean table, NOT pie) */}
+        <div className="os-surface p-5 space-y-3">
+          <div className="border-b border-[var(--border-color)] pb-3">
+            <h2 className="text-sm font-bold text-[var(--text-main)]">Category Financial Matrix</h2>
+            <p className="text-[11px] text-[var(--text-muted)]">Breakdown by revenue, volume, and profit margin.</p>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--border-color)]">
+                <tr>
+                  <th className="pb-2">Category</th>
+                  <th className="pb-2 text-right">Revenue (₹)</th>
+                  <th className="pb-2 text-center">Share</th>
+                  <th className="pb-2 text-right">Margin %</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border-color)]">
+                {data?.category_breakdown?.map((cat) => (
+                  <tr key={cat.category} className="hover:bg-[var(--bg-surface-elevated)] transition-colors">
+                    <td className="py-2.5 font-medium text-[var(--text-main)]">{cat.category}</td>
+                    <td className="py-2.5 text-right font-mono font-semibold text-[var(--text-main)]">
+                      ₹{cat.revenue.toLocaleString('en-IN')}
+                    </td>
+                    <td className="py-2.5 text-center font-mono text-[var(--text-muted)]">
+                      {cat.share_percent}%
+                    </td>
+                    <td className="py-2.5 text-right font-mono font-semibold text-emerald-500">
+                      {cat.margin}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </motion.div>
   )
 }

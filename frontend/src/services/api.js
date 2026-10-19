@@ -1,69 +1,113 @@
 import axios from 'axios'
 
-let rawBase = import.meta.env.VITE_API_URL
-let apiBase = ''
-if (rawBase && rawBase.trim()) {
-  apiBase = rawBase.trim().replace(/\/+$/, '')
-} else if (import.meta.env.DEV) {
-  apiBase = 'http://localhost:8000'
-}
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
 const api = axios.create({
-  baseURL: apiBase,
-  timeout: 60000,
+  baseURL: API_BASE,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 })
 
-// ─── Upload ───────────────────────────────────────────────
-export const uploadFile = (file, onProgress) => {
-  const form = new FormData()
-  form.append('file', file)
-  return api.post('/api/upload', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    onUploadProgress: (e) => onProgress && onProgress(Math.round((e.loaded / e.total) * 100)),
-  })
+// Attach Bearer token from localStorage
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('businessgpt_token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+// Global response interceptor for 401
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Don't auto-redirect if on login page
+      if (!window.location.pathname.includes('/login')) {
+        localStorage.removeItem('businessgpt_token')
+        localStorage.removeItem('businessgpt_user')
+        window.location.href = '/login'
+      }
+    }
+    return Promise.reject(error)
+  }
+)
+
+export const authAPI = {
+  login: (data) => api.post('/auth/login', data),
+  getMe: () => api.get('/auth/me'),
+  getRoles: () => api.get('/auth/roles'),
+  getUsers: () => api.get('/auth/users'),
+  createUser: (data) => api.post('/auth/users', data),
+  deleteUser: (id) => api.delete(`/auth/users/${id}`),
 }
 
-// ─── Chat ─────────────────────────────────────────────────
-export const sendMessage = (message, session_id = 'default') =>
-  api.post('/api/chat', { message, session_id })
+export const posAPI = {
+  searchProducts: (q = '', category = '') => {
+    const params = {}
+    if (q) params.q = q
+    if (category) params.category = category
+    return api.get('/pos/products', { params })
+  },
+  createBill: (data) => api.post('/pos/bill', data),
+  getBillsHistory: (limit = 50) => api.get('/pos/bills', { params: { limit } }),
+}
 
-// ─── Forecast ─────────────────────────────────────────────
-export const getForecast = (horizon = 'month', product = null) =>
-  api.post('/api/forecast/sales', { horizon, product })
+export const inventoryAPI = {
+  getProducts: (params = {}) => api.get('/inventory/products', { params }),
+  getSummary: () => api.get('/inventory/summary'),
+  addStock: (data) => api.post('/inventory/add-stock', data),
+  createProduct: (data) => api.post('/inventory/product', data),
+  updateProduct: (id, data) => api.put(`/inventory/product/${id}`, data),
+  getTransactions: (limit = 50) => api.get('/inventory/transactions', { params: { limit } }),
+}
 
-// ─── Inventory ────────────────────────────────────────────
-export const analyzeInventory = (product = null) =>
-  api.post('/api/inventory/analyze', { product })
+export const analyticsAPI = {
+  getSummary: (days = 30) => api.get('/analytics/summary', { params: { days } }),
+}
 
-export const getInventoryAlerts = () =>
-  api.get('/api/inventory/alerts')
+export const chatAPI = {
+  sendMessage: (message, session_id = 'default') => api.post('/chat', { message, session_id }),
+  getHistory: (session_id = 'default') => api.get('/chat/history', { params: { session_id } }),
+  getSessions: () => api.get('/chat/sessions'),
+  clearHistory: (session_id = null) => api.delete('/chat/history', { params: session_id ? { session_id } : {} }),
+}
 
-// ─── Market Intelligence ──────────────────────────────────
-export const getMarketTrends = (category, region = 'IN') =>
-  api.post('/api/market/trends', { category, region })
+export const alertsAPI = {
+  getAlerts: () => api.get('/alerts/'),
+  markAsRead: (id) => api.patch(`/alerts/${id}/read`),
+}
 
-export const getSeasonalOpportunities = () =>
-  api.get('/api/market/seasonal')
+export const reportsAPI = {
+  getReports: () => api.get('/reports/'),
+  generateReport: (report_type) => api.post(`/reports/generate?report_type=${report_type}`),
+  downloadReport: (filename) => {
+    return `${API_BASE}/reports/download/${filename}`
+  }
+}
 
-// ─── Alerts ───────────────────────────────────────────────
-export const getPendingAlerts = () =>
-  api.get('/api/alerts/pending')
+export const settingsAPI = {
+  getSettings: () => api.get('/settings/'),
+  updateSettings: (data) => api.post('/settings/update', data),
+}
 
-export const generateAlerts = () =>
-  api.post('/api/alerts/generate')
-
-export const markAlertRead = (id) =>
-  api.patch(`/api/alerts/${id}/read`)
-
-export const markAllAlertsRead = () =>
-  api.patch('/api/alerts/read-all')
-
-// ─── Health Score ─────────────────────────────────────────
-export const getHealthScore = () =>
-  api.get('/api/health/score')
-
-// ─── Reports ──────────────────────────────────────────────
-export const generateReport = (period = 'monthly', month = '') =>
-  api.post('/api/reports/generate', { period, month }, { responseType: 'blob' })
+// ── Standalone function exports for Dashboard, AlertsList, Upload ──
+export const getHealthScore = () => api.get('/health/score')
+export const getPendingAlerts = () => api.get('/alerts/pending')
+export const getInventoryAlerts = () => inventoryAPI.getSummary()
+export const getForecast = (horizon = 'month') => api.post('/forecast/sales', { horizon })
+export const generateAlerts = () => api.post('/alerts/generate')
+export const markAlertRead = (id) => api.patch(`/alerts/${id}/read`)
+export const uploadFile = (file, onProgress) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return api.post('/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: (e) => {
+      if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100))
+    }
+  })
+}
 
 export default api

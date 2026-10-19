@@ -6,7 +6,8 @@ from app.modules.forecasting.features import build_prophet_holidays
 def run_prophet(df: pd.DataFrame, horizon_days: int) -> Dict:
     """
     Trains a Prophet model on df['ds', 'y'] and forecasts for horizon_days.
-    Returns dict with predictions and MAPE accuracy.
+    Evaluates out-of-sample holdout MAPE via backtesting (no in-sample fabrication).
+    Enables yearly seasonality only when at least 365 days of data exist.
     """
     try:
         from prophet import Prophet
@@ -15,12 +16,48 @@ def run_prophet(df: pd.DataFrame, horizon_days: int) -> Dict:
 
     holidays = build_prophet_holidays()
 
+    # Guard yearly seasonality: only valid if data spans >= 365 days
+    span_days = (df["ds"].max() - df["ds"].min()).days
+    enable_yearly = span_days >= 365
+
+    # 1. Backtesting evaluation on holdout test set (if enough data)
+    backtest_mape = None
+    if len(df) >= 30:
+        test_days = min(14, len(df) // 4)
+        train_split = df.iloc[:-test_days][["ds", "y"]].copy()
+        test_split = df.iloc[-test_days:][["ds", "y"]].copy()
+
+        try:
+            eval_model = Prophet(
+                holidays=holidays,
+                yearly_seasonality=enable_yearly,
+                weekly_seasonality=True,
+                daily_seasonality=False,
+                interval_width=0.80,
+                changepoint_prior_scale=0.05,
+            )
+            eval_model.add_country_holidays(country_name="IN")
+            eval_model.fit(train_split)
+            eval_future = eval_model.make_future_dataframe(periods=test_days, freq="D")
+            eval_fc = eval_model.predict(eval_future)
+
+            eval_test = eval_fc[eval_fc["ds"] > train_split["ds"].max()]
+            actuals = test_split["y"].values
+            preds = eval_test["yhat"].values[:len(actuals)]
+
+            nonzero_mask = actuals > 0
+            if nonzero_mask.sum() > 0:
+                backtest_mape = float(np.mean(np.abs((actuals[nonzero_mask] - preds[nonzero_mask]) / actuals[nonzero_mask])) * 100)
+        except Exception:
+            backtest_mape = None
+
+    # 2. Fit on full training data for future horizon forecast
     model = Prophet(
         holidays=holidays,
-        yearly_seasonality=True,
+        yearly_seasonality=enable_yearly,
         weekly_seasonality=True,
         daily_seasonality=False,
-        interval_width=0.80,     # 80% confidence interval
+        interval_width=0.80,
         changepoint_prior_scale=0.05,
     )
     model.add_country_holidays(country_name="IN")
@@ -43,17 +80,6 @@ def run_prophet(df: pd.DataFrame, horizon_days: int) -> Dict:
     forecast_only["yhat_lower"] = forecast_only["yhat_lower"].clip(lower=0).round(2)
     forecast_only["yhat_upper"] = forecast_only["yhat_upper"].clip(lower=0).round(2)
 
-    # Calculate in-sample MAPE on training data
-    in_sample = forecast[forecast["ds"] <= last_train_date].copy()
-    actual = train_df.set_index("ds")["y"]
-    predicted = in_sample.set_index("ds")["yhat"]
-    aligned = actual.align(predicted, join="inner")
-    nonzero_mask = aligned[0] != 0
-    if nonzero_mask.sum() > 0:
-        mape = float(np.mean(np.abs((aligned[0][nonzero_mask] - aligned[1][nonzero_mask]) / aligned[0][nonzero_mask])) * 100)
-    else:
-        mape = 0.0
-
     predictions = [
         {
             "date": row["ds"].strftime("%Y-%m-%d"),
@@ -66,6 +92,7 @@ def run_prophet(df: pd.DataFrame, horizon_days: int) -> Dict:
 
     return {
         "predictions": predictions,
-        "mape": round(mape, 2),
+        "mape": round(backtest_mape, 2) if backtest_mape is not None else None,
+        "backtested": backtest_mape is not None,
         "model": "prophet"
     }

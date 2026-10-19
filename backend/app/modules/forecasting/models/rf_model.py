@@ -17,6 +17,35 @@ def run_random_forest(df: pd.DataFrame, horizon_days: int) -> Dict:
 
     available_features = [c for c in FEATURE_COLS if c in df.columns]
 
+    # 1. Out-of-sample holdout backtest for honest MAPE evaluation
+    backtest_mape = None
+    if len(df) >= 30:
+        test_days = min(14, len(df) // 4)
+        train_split = df.iloc[:-test_days]
+        test_split = df.iloc[-test_days:]
+
+        X_eval_train = train_split[available_features].values
+        y_eval_train = train_split["y"].values
+        X_eval_test = test_split[available_features].values
+        y_eval_test = test_split["y"].values
+
+        try:
+            eval_model = RandomForestRegressor(
+                n_estimators=100,
+                max_depth=6,
+                min_samples_split=2,
+                random_state=42,
+                n_jobs=-1
+            )
+            eval_model.fit(X_eval_train, y_eval_train)
+            eval_preds = eval_model.predict(X_eval_test).clip(min=0)
+            nonzero_mask = y_eval_test > 0
+            if nonzero_mask.sum() > 0:
+                backtest_mape = float(np.mean(np.abs((y_eval_test[nonzero_mask] - eval_preds[nonzero_mask]) / y_eval_test[nonzero_mask])) * 100)
+        except Exception:
+            backtest_mape = None
+
+    # 2. Fit on full data for future horizon forecast
     X_train = df[available_features].values
     y_train = df["y"].values
 
@@ -57,16 +86,9 @@ def run_random_forest(df: pd.DataFrame, horizon_days: int) -> Dict:
         for i in range(horizon_days)
     ]
 
-    # In-sample MAPE
-    in_sample_preds = model.predict(X_train).clip(min=0)
-    nonzero_mask = y_train != 0
-    if nonzero_mask.sum() > 0:
-        mape = float(np.mean(np.abs((y_train[nonzero_mask] - in_sample_preds[nonzero_mask]) / y_train[nonzero_mask])) * 100)
-    else:
-        mape = 0.0
-
     return {
         "predictions": predictions,
-        "mape": round(mape, 2),
+        "mape": round(backtest_mape, 2) if backtest_mape is not None else None,
+        "backtested": backtest_mape is not None,
         "model": "random_forest"
     }

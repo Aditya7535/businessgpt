@@ -1,80 +1,174 @@
+import React, { useState } from 'react'
 import { NavLink } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
 import {
-  LayoutDashboard, MessageSquare, BarChart2, Upload,
-  FileText, Bell, ChevronLeft, Bot, X
+  ShoppingCart,
+  Boxes,
+  Terminal,
+  LineChart,
+  FileText,
+  Bell,
+  Settings,
+  ChevronLeft,
+  ChevronRight,
+  Store,
+  Sparkles,
+  LayoutDashboard,
+  Upload
 } from 'lucide-react'
 
-const navItems = [
-  { to: '/',        icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/chat',    icon: MessageSquare,   label: 'Ask BusinessGPT' },
-  { to: '/analytics', icon: BarChart2,     label: 'Analytics' },
-  { to: '/upload',  icon: Upload,          label: 'Upload Data' },
-  { to: '/alerts',  icon: Bell,            label: 'Alerts' },
-  { to: '/reports', icon: FileText,        label: 'Reports' },
-]
+export default function Sidebar() {
+  const { user, hasRole } = useAuth()
+  const [collapsed, setCollapsed] = useState(false)
 
-export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
+  const navItems = [
+    {
+      to: '/dashboard',
+      label: 'Dashboard',
+      icon: LayoutDashboard,
+      roles: ['OWNER'],
+    },
+    {
+      to: '/pos',
+      label: 'POS Billing',
+      icon: ShoppingCart,
+      roles: ['EMPLOYEE', 'MANAGER', 'OWNER'],
+      shortcut: 'F1'
+    },
+    {
+      to: '/inventory',
+      label: 'Inventory',
+      icon: Boxes,
+      roles: ['MANAGER', 'OWNER'],
+      badge: 'Live'
+    },
+    {
+      to: '/chat',
+      label: 'AI Chat',
+      icon: Terminal,
+      roles: ['OWNER'],
+      highlight: true
+    },
+    {
+      to: '/analytics',
+      label: 'Analytics',
+      icon: LineChart,
+      roles: ['OWNER'],
+    },
+    {
+      to: '/reports',
+      label: 'Reports',
+      icon: FileText,
+      roles: ['MANAGER', 'OWNER'],
+    },
+    {
+      to: '/alerts',
+      label: 'Alerts',
+      icon: Bell,
+      roles: ['MANAGER', 'OWNER'],
+    },
+    {
+      to: '/settings',
+      label: 'Settings',
+      icon: Settings,
+      roles: ['OWNER'],
+    },
+    {
+      to: '/upload',
+      label: 'Upload Data',
+      icon: Upload,
+      roles: ['MANAGER', 'OWNER'],
+    },
+  ]
+
+  // Filter items visible to user
+  const visibleItems = navItems.filter((item) => hasRole(item.roles))
+
   return (
-    <>
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div className="fixed inset-0 bg-black/40 z-30 lg:hidden" onClick={onMobileClose} />
-      )}
-
-      <aside className={`
-        fixed top-0 left-0 h-full z-40 bg-white border-r border-gray-100 shadow-lg
-        flex flex-col transition-all duration-300
-        ${collapsed ? 'w-[68px]' : 'w-[240px]'}
-        ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
-        {/* Logo */}
-        <div className="flex items-center gap-3 px-4 py-5 border-b border-gray-100 min-h-[68px]">
-          <div className="w-9 h-9 rounded-xl bg-primary-600 flex items-center justify-center flex-shrink-0">
-            <Bot className="w-5 h-5 text-white" />
-          </div>
-          {!collapsed && (
-            <div className="overflow-hidden">
-              <p className="font-bold text-gray-900 text-sm leading-tight">BusinessGPT</p>
-              <p className="text-xs text-gray-500">AI Intelligence</p>
+    <aside
+      className={`border-r border-[var(--border-color)] bg-[var(--bg-surface)] flex flex-col justify-between transition-all duration-200 z-40 ${
+        collapsed ? 'w-16' : 'w-60'
+      }`}
+    >
+      <div>
+        {/* Brand Header */}
+        <div className="h-14 border-b border-[var(--border-color)] px-4 flex items-center justify-between">
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold shrink-0 shadow-sm shadow-blue-500/20">
+              <Store size={18} />
             </div>
-          )}
-          <button onClick={onMobileClose} className="ml-auto lg:hidden text-gray-400 hover:text-gray-600">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Nav */}
-        <nav className="flex-1 py-4 overflow-y-auto">
-          {navItems.map(({ to, icon: Icon, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              onClick={onMobileClose}
-              className={({ isActive }) => `
-                flex items-center gap-3 mx-2 px-3 py-2.5 rounded-xl mb-0.5
-                transition-all duration-200 group
-                ${isActive
-                  ? 'bg-primary-50 text-primary-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
-              `}
-            >
-              <Icon className="w-5 h-5 flex-shrink-0" />
-              {!collapsed && <span className="text-sm font-medium truncate">{label}</span>}
-            </NavLink>
-          ))}
-        </nav>
-
-        {/* Collapse toggle — desktop only */}
-        <div className="hidden lg:flex p-3 border-t border-gray-100">
+            {!collapsed && (
+              <div className="flex flex-col">
+                <span className="font-bold text-sm tracking-tight text-[var(--text-main)] flex items-center gap-1">
+                  BusinessGPT
+                  <Sparkles size={11} className="text-blue-500" />
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)] font-mono uppercase tracking-wider">
+                  OS Terminal v8
+                </span>
+              </div>
+            )}
+          </div>
           <button
-            onClick={onToggle}
-            className="w-full flex items-center justify-center p-2 rounded-xl text-gray-400 hover:bg-gray-50 hover:text-gray-700 transition-all"
+            onClick={() => setCollapsed(!collapsed)}
+            className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)] transition-colors cursor-pointer"
           >
-            <ChevronLeft className={`w-5 h-5 transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`} />
+            {collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
           </button>
         </div>
-      </aside>
-    </>
+
+        {/* Navigation Items */}
+        <nav className="p-2 space-y-1">
+          {visibleItems.map((item) => {
+            const Icon = item.icon
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                    isActive
+                      ? 'bg-blue-600 text-white font-semibold shadow-sm'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)]'
+                  }`
+                }
+                title={collapsed ? item.label : undefined}
+              >
+                <Icon size={17} className="shrink-0" />
+                {!collapsed && (
+                  <div className="flex items-center justify-between w-full">
+                    <span>{item.label}</span>
+                    {item.highlight && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-mono">
+                        AI
+                      </span>
+                    )}
+                    {item.badge && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono">
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </NavLink>
+            )
+          })}
+        </nav>
+      </div>
+
+      {/* Role Footer */}
+      {!collapsed && user && (
+        <div className="p-3 border-t border-[var(--border-color)] m-2 rounded-lg bg-[var(--bg-surface-elevated)]">
+          <div className="text-[11px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">
+            Active Mode
+          </div>
+          <div className="text-xs font-medium text-[var(--text-main)] truncate mt-0.5">
+            {user.role === 'OWNER' && 'Full BI & AI Access'}
+            {user.role === 'MANAGER' && 'Store Operations & Inventory'}
+            {user.role === 'EMPLOYEE' && 'Counter Billing Mode'}
+          </div>
+        </div>
+      )}
+    </aside>
   )
 }

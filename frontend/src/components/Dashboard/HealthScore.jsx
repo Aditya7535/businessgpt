@@ -8,7 +8,9 @@ export default function HealthScore({ data, loading }) {
     </div>
   )
 
-  const score = data?.total_score ?? 0
+  const hasScore = data?.total_score != null
+  const score = hasScore ? data.total_score : 0
+  const displayScore = hasScore ? data.total_score : '—'
   const grade = data?.grade ?? 'N/A'
   const trend = data?.trend ?? 'stable'
 
@@ -17,11 +19,13 @@ export default function HealthScore({ data, loading }) {
     C: 'text-amber-500', D: 'text-orange-500', F: 'text-red-500'
   }[grade] ?? 'text-gray-400'
 
-  const ringColor = score >= 75 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444'
+  const ringColor = hasScore
+    ? (score >= 75 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444')
+    : '#9ca3af'
 
   const radius = 45
   const circ = 2 * Math.PI * radius
-  const offset = circ - (score / 100) * circ
+  const offset = hasScore ? circ - (score / 100) * circ : circ
 
   return (
     <div className="card flex flex-col items-center py-6 gap-4">
@@ -35,7 +39,7 @@ export default function HealthScore({ data, loading }) {
             strokeLinecap="round" style={{ transition: 'stroke-dashoffset 1s ease' }} />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-3xl font-bold text-gray-900">{score}</span>
+          <span className="text-3xl font-bold text-gray-900">{displayScore}</span>
           <span className={`text-lg font-bold ${gradeColor}`}>{grade}</span>
         </div>
       </div>
@@ -54,11 +58,19 @@ export default function HealthScore({ data, loading }) {
       {/* Component bars */}
       {data?.components && (
         <div className="w-full space-y-2 pt-2 border-t border-gray-100">
-          {Object.entries({ Revenue: [data.components.revenue, 30], Inventory: [data.components.inventory, 25], 'Sales Trend': [data.components.sales_trend, 25], Diversity: [data.components.product_diversity, 20] }).map(([label, [val, max]]) => (
+          {Object.entries({
+            Revenue: [data.components.revenue ?? 0, 30],
+            Inventory: [data.components.inventory ?? 0, 25],
+            'Sales Trend': [data.components.sales_trend ?? 0, 25],
+            Diversity: [data.components.product_diversity ?? 0, 20]
+          }).map(([label, [val, max]]) => (
             <div key={label} className="flex items-center gap-2 text-xs">
               <span className="w-20 text-gray-500 truncate">{label}</span>
               <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-                <div className="bg-primary-500 h-1.5 rounded-full transition-all" style={{ width: `${(val / max) * 100}%` }} />
+                <div
+                  className="bg-primary-500 h-1.5 rounded-full transition-all"
+                  style={{ width: `${Math.min(100, Math.max(0, (val / max) * 100))}%` }}
+                />
               </div>
               <span className="w-10 text-right font-medium text-gray-700">{val}/{max}</span>
             </div>

@@ -1,47 +1,75 @@
-import { Menu, Bell, RefreshCw } from 'lucide-react'
-import { useLocation } from 'react-router-dom'
-import { useState, useEffect } from 'react'
-import { getPendingAlerts } from '../../services/api'
+import React from 'react'
+import { useAuth } from '../../context/AuthContext'
+import { Sun, Moon, Bell, LogOut, ShieldCheck, User } from 'lucide-react'
 
-const PAGE_TITLES = {
-  '/': 'Dashboard',
-  '/chat': 'Ask BusinessGPT',
-  '/analytics': 'Analytics',
-  '/upload': 'Upload Data',
-  '/alerts': 'Alerts',
-  '/reports': 'Reports',
-}
+export default function Header() {
+  const { user, logout, theme, toggleTheme } = useAuth()
 
-export default function Header({ onMenuClick }) {
-  const { pathname } = useLocation()
-  const [unread, setUnread] = useState(0)
-
-  useEffect(() => {
-    getPendingAlerts()
-      .then(r => setUnread(r.data?.unread_count || 0))
-      .catch(() => {})
-  }, [pathname])
+  const getRoleBadgeStyle = (role) => {
+    switch (role?.toUpperCase()) {
+      case 'OWNER':
+        return 'bg-blue-500/10 text-blue-500 border-blue-500/20'
+      case 'MANAGER':
+        return 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+      case 'EMPLOYEE':
+        return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+      default:
+        return 'bg-gray-500/10 text-gray-500 border-gray-500/20'
+    }
+  }
 
   return (
-    <header className="h-[68px] bg-white border-b border-gray-100 flex items-center justify-between px-6 sticky top-0 z-20 shadow-sm">
-      <div className="flex items-center gap-4">
-        <button onClick={onMenuClick} className="lg:hidden text-gray-500 hover:text-gray-800 transition-colors">
-          <Menu className="w-6 h-6" />
-        </button>
-        <h1 className="text-lg font-semibold text-gray-900">{PAGE_TITLES[pathname] || 'BusinessGPT'}</h1>
-      </div>
+    <header className="h-14 border-b border-[var(--border-color)] bg-[var(--bg-surface)] px-6 flex items-center justify-between sticky top-0 z-30 transition-colors">
       <div className="flex items-center gap-3">
-        <a href="/alerts" className="relative p-2 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-gray-800 transition-all">
-          <Bell className="w-5 h-5" />
-          {unread > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-              {unread > 9 ? '9+' : unread}
-            </span>
-          )}
-        </a>
-        <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center">
-          <span className="text-white text-xs font-bold">BG</span>
+        <span className="text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)]">
+          Store Operations Console
+        </span>
+        <span className="text-xs text-[var(--text-muted)] opacity-50">/</span>
+        <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>Live POS Network</span>
         </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        {/* Role Badge */}
+        {user && (
+          <div
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border ${getRoleBadgeStyle(
+              user.role
+            )}`}
+          >
+            <ShieldCheck size={13} />
+            <span>{user.role}</span>
+          </div>
+        )}
+
+        {/* User Pill */}
+        {user && (
+          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-md bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-xs font-medium text-[var(--text-main)]">
+            <User size={12} className="text-[var(--text-muted)]" />
+            <span>{user.name}</span>
+          </div>
+        )}
+
+        {/* Theme Toggle Button */}
+        <button
+          onClick={toggleTheme}
+          title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+          className="p-2 rounded-md border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)] transition-all cursor-pointer"
+        >
+          {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+        </button>
+
+        {/* Logout */}
+        <button
+          onClick={logout}
+          title="Sign out of console"
+          className="p-2 rounded-md border border-[var(--border-color)] text-red-500 hover:bg-red-500/10 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-medium"
+        >
+          <LogOut size={14} />
+          <span className="hidden md:inline">Exit</span>
+        </button>
       </div>
     </header>
   )

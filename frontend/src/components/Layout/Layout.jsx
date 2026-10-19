@@ -1,25 +1,15 @@
-import { useState } from 'react'
+import React from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
 
 export default function Layout() {
-  const [collapsed, setCollapsed] = useState(false)
-  const [mobileOpen, setMobileOpen] = useState(false)
-
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      <Sidebar
-        collapsed={collapsed}
-        onToggle={() => setCollapsed(c => !c)}
-        mobileOpen={mobileOpen}
-        onMobileClose={() => setMobileOpen(false)}
-      />
-
-      {/* Main area */}
-      <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${collapsed ? 'lg:ml-[68px]' : 'lg:ml-[240px]'}`}>
-        <Header onMenuClick={() => setMobileOpen(true)} />
-        <main className="flex-1 p-6">
+    <div className="flex h-screen w-screen overflow-hidden bg-[var(--bg-main)] text-[var(--text-main)] transition-colors">
+      <Sidebar />
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        <Header />
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-[var(--bg-main)]">
           <Outlet />
         </main>
       </div>

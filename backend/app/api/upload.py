@@ -1,10 +1,15 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks
+from app.core.auth import require_role
+from app.models.user import User
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.dataset import Dataset
 from app.schemas.dataset import DatasetResponse
 from app.services.data_cleaning import clean_dataset
-from app.modules.rag.embeddings import embed_dataset
+from app.services.dataset_table import create_uploaded_table
+
+import logging
+logger = logging.getLogger("businessgpt.upload")
 
 router = APIRouter()
 
@@ -26,7 +31,7 @@ def detect_dataset_type(columns: list[str]) -> str:
     return "unknown"
 
 @router.post("/upload", response_model=DatasetResponse)
-async def upload_dataset(background_tasks: BackgroundTasks, file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_dataset(background_tasks: BackgroundTasks, file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(require_role(["MANAGER", "OWNER"]))):
     content = await file.read()
     
     try:
@@ -60,7 +65,14 @@ async def upload_dataset(background_tasks: BackgroundTasks, file: UploadFile = F
     db.commit()
     db.refresh(new_dataset)
     
-    # Step 5: Automatically trigger embedding pipeline
-    background_tasks.add_task(embed_dataset, data, file.filename)
-    
+    # Create persistent PostgreSQL table for Text-to-SQL
+    try:
+        table_name = create_uploaded_table(new_dataset.id, file.filename, data, db=db)
+        new_dataset.table_name = table_name
+        db.commit()
+        db.refresh(new_dataset)
+    except Exception as e:
+        logger.error(f"Failed to create uploaded PostgreSQL table for dataset {new_dataset.id}: {e}")
+
     return new_dataset
+

@@ -9,17 +9,11 @@ openpyxl
 langchain
 langchain-groq
 langchain-community
-chromadb
-langchain-chroma
 langgraph
 prophet
 xgboost
 scikit-learn
-pytrends
-newsapi-python
 apscheduler
 reportlab
-twilio
-langchain-ollama
 pydantic-settings
 gunicorn

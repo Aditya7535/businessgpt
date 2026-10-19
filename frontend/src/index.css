@@ -1,56 +1,185 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg-main: #F8F8F8;
+  --bg-surface: #FFFFFF;
+  --bg-surface-elevated: #F1F3F5;
+  --border-color: #E5E5E5;
+  --text-main: #111827;
+  --text-muted: #6B7280;
+  --accent: #2563EB;
+  --accent-hover: #1D4ED8;
+  --success: #10B981;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+}
+
+.dark {
+  --bg-main: #0A0A0A;
+  --bg-surface: #111111;
+  --bg-surface-elevated: #181818;
+  --border-color: #222222;
+  --text-main: #F3F4F6;
+  --text-muted: #9CA3AF;
+  --accent: #2563EB;
+  --accent-hover: #3B82F6;
+  --success: #10B981;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+}
+
 @layer base {
-  * { @apply box-border; }
-  body { @apply font-sans bg-gray-50 text-gray-900 antialiased; }
-  ::-webkit-scrollbar { @apply w-1.5; }
-  ::-webkit-scrollbar-track { @apply bg-gray-100; }
-  ::-webkit-scrollbar-thumb { @apply bg-gray-300 rounded-full; }
-  ::-webkit-scrollbar-thumb:hover { @apply bg-gray-400; }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
 }
 
-@layer components {
-  .card { @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-5; }
-  .btn-primary { @apply bg-primary-600 hover:bg-primary-700 text-white font-semibold px-5 py-2.5 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md active:scale-95 cursor-pointer; }
-  .btn-secondary { @apply bg-white hover:bg-gray-50 text-gray-700 font-semibold px-5 py-2.5 rounded-xl border border-gray-200 transition-all duration-200 cursor-pointer; }
-  .badge { @apply inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full; }
-  .badge-blue { @apply badge bg-blue-100 text-blue-700; }
-  .badge-green { @apply badge bg-emerald-100 text-emerald-700; }
-  .badge-red { @apply badge bg-red-100 text-red-700; }
-  .badge-yellow { @apply badge bg-amber-100 text-amber-700; }
-  .badge-purple { @apply badge bg-purple-100 text-purple-700; }
-  .badge-gray { @apply badge bg-gray-100 text-gray-600; }
-  .input { @apply w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all text-sm; }
-  .skeleton { @apply animate-pulse bg-gray-200 rounded-xl; }
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.3);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.5);
 }
 
-/* Chat bubble styles */
-.chat-user { @apply bg-primary-600 text-white rounded-2xl rounded-br-sm; }
-.chat-ai { @apply bg-white border border-gray-100 text-gray-800 rounded-2xl rounded-bl-sm shadow-sm; }
-
-/* Typing dots */
-.typing-dot {
-  @apply w-2 h-2 bg-gray-400 rounded-full inline-block mx-0.5;
-  animation: typingBounce 1.2s infinite ease-in-out;
-}
-.typing-dot:nth-child(2) { animation-delay: 0.2s; }
-.typing-dot:nth-child(3) { animation-delay: 0.4s; }
-
-@keyframes typingBounce {
-  0%, 60%, 100% { transform: translateY(0); }
-  30% { transform: translateY(-6px); }
+/* OS Window / Card Surface */
+.os-surface {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
 }
 
-/* Sidebar transition */
-.sidebar-enter { @apply -translate-x-full; }
-.sidebar-active { @apply translate-x-0; }
+.os-surface-elevated {
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
 
-/* Gradient text */
-.gradient-text {
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+/* Buttons */
+.btn-accent {
+  background-color: var(--accent);
+  color: #FFFFFF;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btn-accent:hover {
+  background-color: var(--accent-hover);
+  transform: translateY(-1px);
+}
+.btn-accent:active {
+  transform: translateY(0);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  padding: 8px 14px;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.btn-ghost:hover {
+  background-color: var(--bg-surface-elevated);
+}
+
+/* Status Badges */
+.badge-critical {
+  background-color: rgba(239, 68, 68, 0.12);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-low {
+  background-color: rgba(245, 158, 11, 0.12);
+  color: #F59E0B;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-optimal {
+  background-color: rgba(16, 185, 129, 0.12);
+  color: #10B981;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-overstock {
+  background-color: rgba(37, 99, 235, 0.12);
+  color: #3B82F6;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Print styling for receipts */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-receipt, #printable-receipt * {
+    visibility: visible;
+  }
+  #printable-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+    margin: 0;
+    padding: 10px;
+    background: white !important;
+    color: black !important;
+  }
 }

@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { motion } from 'framer-motion'
 import { useDropzone } from 'react-dropzone'
 import { Upload, FileText, CheckCircle, XCircle, Loader2, Table } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -61,7 +62,13 @@ export default function UploadPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.15 }}
+      className="max-w-3xl mx-auto space-y-6"
+    >
       <div>
         <h2 className="text-xl font-bold text-gray-900">Upload Business Data</h2>
         <p className="text-sm text-gray-500 mt-1">Upload CSV or Excel file — data will auto-embed into AI knowledge base</p>
@@ -147,6 +154,6 @@ export default function UploadPage() {
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   )
 }

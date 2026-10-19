@@ -16,6 +16,7 @@ class DatasetResponse(DatasetBase):
     row_count: int
     columns: List[str]
     dataset_type: Optional[str] = "unknown"
+    table_name: Optional[str] = None
 
     class Config:
         from_attributes = True

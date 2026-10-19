@@ -1,117 +1,188 @@
-import { useState, useEffect } from 'react'
-import { AlertTriangle, XCircle, CheckCircle, Info, Bell, RefreshCw } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
+import { alertsAPI } from '../services/api'
+import {
+  Bell,
+  CheckCircle,
+  AlertTriangle,
+  AlertOctagon,
+  TrendingUp,
+  Boxes,
+  Sparkles,
+  Calendar,
+  Check
+} from 'lucide-react'
 import toast from 'react-hot-toast'
-import { getPendingAlerts, generateAlerts, markAlertRead, markAllAlertsRead } from '../services/api'
-
-const FILTERS = ['ALL', 'INVENTORY', 'FESTIVAL', 'REVENUE', 'TREND']
-const SEVERITY_CONFIG = {
-  HIGH:   { icon: XCircle,       cls: 'text-red-500',    bg: 'bg-red-50 border-red-200',    badge: 'badge-red' },
-  MEDIUM: { icon: AlertTriangle, cls: 'text-amber-500',  bg: 'bg-amber-50 border-amber-200', badge: 'badge-yellow' },
-  LOW:    { icon: Info,          cls: 'text-blue-500',   bg: 'bg-blue-50 border-blue-200',   badge: 'badge-blue' },
-}
 
 export default function Alerts() {
   const [alerts, setAlerts] = useState([])
-  const [filter, setFilter] = useState('ALL')
   const [loading, setLoading] = useState(true)
-  const [generating, setGenerating] = useState(false)
+  const [filterTab, setFilterTab] = useState('ALL')
 
-  const loadAlerts = async () => {
+  const fetchAlerts = async () => {
     try {
-      const res = await getPendingAlerts()
-      setAlerts(res.data?.alerts ?? [])
-    } catch { toast.error('Alerts load nahi ho sake') }
-    finally { setLoading(false) }
+      setLoading(true)
+      const res = await alertsAPI.getAlerts()
+      setAlerts(res.data)
+    } catch (err) {
+      toast.error('Failed to load store alerts.')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  useEffect(() => { loadAlerts() }, [])
+  useEffect(() => {
+    fetchAlerts()
+  }, [])
 
-  const handleGenerate = async () => {
-    setGenerating(true)
+  const markRead = async (id) => {
     try {
-      const res = await generateAlerts()
-      toast.success(`${res.data.generated} new alerts generated!`)
-      await loadAlerts()
-    } catch { toast.error('Alert generation failed') }
-    finally { setGenerating(false) }
+      await alertsAPI.markAsRead(id)
+      setAlerts((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, is_read: true } : a))
+      )
+      toast.success('Alert marked as read.')
+    } catch (err) {
+      toast.error('Failed to update alert.')
+    }
   }
 
-  const handleReadAll = async () => {
-    await markAllAlertsRead()
-    setAlerts([])
-    toast.success('Sab alerts read mark ho gaye!')
+  const filteredAlerts = alerts.filter((a) => {
+    if (filterTab === 'UNREAD') return !a.is_read
+    if (filterTab === 'CRITICAL') return a.severity === 'HIGH'
+    if (filterTab === 'INVENTORY') return a.alert_type === 'INVENTORY'
+    if (filterTab === 'FESTIVAL') return a.alert_type === 'FESTIVAL'
+    return true
+  })
+
+  const getAlertIcon = (type) => {
+    switch (type) {
+      case 'INVENTORY':
+        return <Boxes size={16} className="text-amber-500" />
+      case 'FESTIVAL':
+        return <Sparkles size={16} className="text-purple-500" />
+      case 'REVENUE':
+        return <TrendingUp size={16} className="text-emerald-500" />
+      default:
+        return <Bell size={16} className="text-blue-500" />
+    }
   }
 
-  const handleRead = async (id) => {
-    await markAlertRead(id)
-    setAlerts(a => a.filter(x => x.id !== id))
+  const getSeverityBadge = (severity) => {
+    switch (severity) {
+      case 'HIGH':
+        return <span className="badge-critical">HIGH SEVERITY</span>
+      case 'MEDIUM':
+        return <span className="badge-low">MEDIUM</span>
+      default:
+        return <span className="badge-optimal">INFO</span>
+    }
   }
-
-  const filtered = filter === 'ALL' ? alerts : alerts.filter(a => a.type === filter)
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.15 }}
+      className="space-y-5"
+    >
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Alerts</h2>
-          <p className="text-sm text-gray-500">{alerts.length} unread alerts</p>
+          <h1 className="text-xl font-bold tracking-tight text-[var(--text-main)] flex items-center gap-2">
+            <Bell size={20} className="text-blue-500" />
+            Operational & Business Intelligence Alerts
+          </h1>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            Automated stock warnings, seasonal festival demand spikes, and anomaly alerts.
+          </p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleGenerate} disabled={generating} className="btn-secondary flex items-center gap-2 text-sm">
-            <RefreshCw className={`w-4 h-4 ${generating ? 'animate-spin' : ''}`} />
-            Generate New
-          </button>
-          {alerts.length > 0 && (
-            <button onClick={handleReadAll} className="btn-primary text-sm">Mark All Read</button>
-          )}
+
+        {/* Filter Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto p-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] text-xs">
+          {['ALL', 'UNREAD', 'CRITICAL', 'INVENTORY', 'FESTIVAL'].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setFilterTab(tab)}
+              className={`px-3 py-1 rounded-md font-mono font-medium transition-all cursor-pointer whitespace-nowrap ${
+                filterTab === tab
+                  ? 'bg-blue-600 text-white font-bold shadow-sm'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-2 flex-wrap">
-        {FILTERS.map(f => (
-          <button key={f} onClick={() => setFilter(f)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${filter === f ? 'bg-primary-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-primary-300'}`}>
-            {f}
-          </button>
-        ))}
-      </div>
-
-      {/* Alerts list */}
-      {loading ? (
-        <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="skeleton h-20 rounded-2xl" />)}</div>
-      ) : filtered.length === 0 ? (
-        <div className="card flex flex-col items-center py-16 gap-3 text-gray-400">
-          <CheckCircle className="w-12 h-12 text-emerald-400" />
-          <p className="font-semibold text-gray-600">Koi alerts nahi hain!</p>
-          <p className="text-sm">Sab clear hai 🎉</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filtered.map(alert => {
-            const cfg = SEVERITY_CONFIG[alert.severity] ?? SEVERITY_CONFIG.LOW
-            const Icon = cfg.icon
-            return (
-              <div key={alert.id} className={`flex items-start gap-4 p-4 rounded-2xl border ${cfg.bg}`}>
-                <Icon className={`w-5 h-5 flex-shrink-0 mt-0.5 ${cfg.cls}`} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`badge ${cfg.badge}`}>{alert.severity}</span>
-                    <span className="badge badge-gray">{alert.type}</span>
-                  </div>
-                  <p className="text-sm text-gray-800 leading-relaxed">{alert.message}</p>
-                  {alert.created_at && (
-                    <p className="text-xs text-gray-400 mt-1">{new Date(alert.created_at).toLocaleString('en-IN')}</p>
-                  )}
+      {/* Alerts Stream */}
+      <div className="space-y-3">
+        {loading ? (
+          <div className="space-y-3">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-20 rounded-xl os-surface animate-pulse" />
+            ))}
+          </div>
+        ) : filteredAlerts.length === 0 ? (
+          <div className="os-surface p-12 text-center text-[var(--text-muted)] flex flex-col items-center">
+            <CheckCircle size={36} className="text-emerald-500 mb-2 opacity-80" />
+            <p className="text-sm font-semibold text-[var(--text-main)]">Sab Theek Hai! (All Clear)</p>
+            <p className="text-xs text-[var(--text-muted)] mt-1">No pending unread alerts in this category.</p>
+          </div>
+        ) : (
+          filteredAlerts.map((alert) => (
+            <div
+              key={alert.id}
+              className={`p-4 rounded-xl os-surface border transition-all flex items-start justify-between gap-4 ${
+                alert.is_read
+                  ? 'opacity-60 bg-[var(--bg-surface)]'
+                  : alert.severity === 'HIGH'
+                  ? 'border-l-4 border-l-red-500 bg-red-500/5'
+                  : 'border-l-4 border-l-blue-500'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] shrink-0">
+                  {getAlertIcon(alert.alert_type)}
                 </div>
-                <button onClick={() => handleRead(alert.id)} className="btn-secondary text-xs py-1.5 px-3 flex-shrink-0">
-                  ✓ Read
-                </button>
+
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                      {alert.alert_type}
+                    </span>
+                    {getSeverityBadge(alert.severity)}
+                    {alert.is_read && (
+                      <span className="text-[10px] font-mono text-[var(--text-muted)]">Read</span>
+                    )}
+                  </div>
+                  <p className="text-xs font-medium text-[var(--text-main)] leading-relaxed">
+                    {alert.message}
+                  </p>
+                  <div className="text-[10px] text-[var(--text-muted)] font-mono">
+                    {new Date(alert.created_at).toLocaleString('en-IN', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
+                  </div>
+                </div>
               </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
+
+              {!alert.is_read && (
+                <button
+                  onClick={() => markRead(alert.id)}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-medium border border-[var(--border-color)] hover:border-emerald-500 hover:text-emerald-500 transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
+                >
+                  <Check size={12} />
+                  Mark Read
+                </button>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </motion.div>
   )
 }
