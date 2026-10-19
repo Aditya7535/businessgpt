@@ -6,10 +6,30 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
+import urllib.parse
+
 def _normalize_database_url(url: str) -> str:
     url = (url or "").strip()
     if not url:
         return "sqlite:///./businessgpt.db"
+
+    # Safely handle unencoded special characters (e.g. '@' in passwords)
+    if "://" in url:
+        scheme, rest = url.split("://", 1)
+        if "/" in rest:
+            auth_host, path = rest.split("/", 1)
+            path = "/" + path
+        else:
+            auth_host, path = rest, ""
+        
+        if auth_host.count("@") > 1:
+            user_pass, host_port = auth_host.rsplit("@", 1)
+            if ":" in user_pass:
+                user, password = user_pass.split(":", 1)
+                encoded_password = urllib.parse.quote_plus(password)
+                auth_host = f"{user}:{encoded_password}@{host_port}"
+                url = f"{scheme}://{auth_host}{path}"
+
     if url.startswith("sqlite"):
         return url
     if url.startswith("postgres://"):

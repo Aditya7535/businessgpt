@@ -1,32 +1,42 @@
-from sqlalchemy import create_engine
+import logging
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
-from app.core.config import settings
+from app.core.config import settings, _normalize_database_url
 
-raw_url = (settings.DATABASE_URL or "").strip()
-if not raw_url:
-    db_url = "sqlite:///./businessgpt.db"
-elif raw_url.startswith("postgres://"):
-    db_url = raw_url.replace("postgres://", "postgresql+pg8000://", 1)
-elif raw_url.startswith("postgresql://") and not raw_url.startswith("postgresql+"):
-    db_url = raw_url.replace("postgresql://", "postgresql+pg8000://", 1)
-else:
-    db_url = raw_url
+logger = logging.getLogger("businessgpt.database")
 
-is_sqlite = db_url.startswith("sqlite")
-engine_kwargs = {
-    "pool_pre_ping": True,
-}
-if is_sqlite:
-    engine_kwargs["connect_args"] = {"check_same_thread": False}
-else:
-    engine_kwargs["pool_recycle"] = 300
-
-engine = create_engine(
-    db_url,
-    **engine_kwargs
-)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+def _create_resilient_engine():
+    target_url = _normalize_database_url(settings.DATABASE_URL)
+    is_sqlite = target_url.startswith("sqlite")
+    
+    kwargs = {"pool_pre_ping": True}
+    if is_sqlite:
+        kwargs["connect_args"] = {"check_same_thread": False}
+    else:
+        kwargs["pool_recycle"] = 300
+
+    try:
+        candidate_engine = create_engine(target_url, **kwargs)
+        with candidate_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        logger.info(f"Database connected successfully with driver: {candidate_engine.dialect.driver}")
+        return candidate_engine
+    except Exception as exc:
+        if is_sqlite:
+            # If SQLite failed, re-raise
+            raise exc
+        
+        logger.warning(
+            f"Configured database connection failed ({exc}). "
+            "Falling back to built-in SQLite database (businessgpt.db) so the app stays functional."
+        )
+        fallback_engine = create_engine("sqlite:///./businessgpt.db", pool_pre_ping=True, connect_args={"check_same_thread": False})
+        return fallback_engine
+
+engine = _create_resilient_engine()
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def get_db():
     db = SessionLocal()
