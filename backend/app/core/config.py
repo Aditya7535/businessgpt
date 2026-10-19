@@ -6,7 +6,11 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 def _normalize_database_url(url: str) -> str:
-    url = url.strip()
+    url = (url or "").strip()
+    if not url:
+        return "sqlite:///./businessgpt.db"
+    if url.startswith("sqlite"):
+        return url
     if url.startswith("postgres://"):
         return url.replace("postgres://", "postgresql+pg8000://", 1)
     if url.startswith("postgresql://") and not url.startswith("postgresql+"):
