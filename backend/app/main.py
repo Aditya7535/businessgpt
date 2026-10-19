@@ -88,3 +88,44 @@ def read_root():
 def health_check():
     return {"status": "ok", "service": "BusinessGPT API"}
 
+@app.get("/api/db-status")
+def db_status():
+    import traceback
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        
+        from app.models.user import User
+        from app.core.database import SessionLocal
+        db = SessionLocal()
+        try:
+            # If users don't exist, seed now
+            count = db.query(User).count()
+            if count == 0:
+                seed_database()
+                count = db.query(User).count()
+            users = [{"id": u.id, "name": u.name, "role": u.role} for u in db.query(User).all()]
+            return {"status": "ok", "user_count": count, "users": users, "driver": engine.dialect.driver}
+        except Exception as q_err:
+            try:
+                seed_database()
+                count = db.query(User).count()
+                users = [{"id": u.id, "name": u.name, "role": u.role} for u in db.query(User).all()]
+                return {"status": "re-seeded_ok", "user_count": count, "users": users}
+            except Exception as s_err:
+                return {
+                    "status": "seed_failed",
+                    "query_error": str(q_err),
+                    "seed_error": str(s_err),
+                    "traceback": traceback.format_exc()
+                }
+        finally:
+            db.close()
+    except Exception as e:
+        return {
+            "status": "database_connection_error",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
