@@ -170,10 +170,31 @@ def adapt_sql_for_dialect(sql: str, db) -> str:
         sql = re.sub(r"\bILIKE\b", "LIKE", sql, flags=re.IGNORECASE)
         # 2. Type casting ::type
         sql = re.sub(r"::\s*[a-zA-Z_]+", "", sql)
-        # 3. Date INTERVAL arithmetic
-        sql = re.sub(r"-\s*INTERVAL\s*'(\d+)\s*days?'", r"- \1", sql, flags=re.IGNORECASE)
-        # 4. GREATEST -> MAX
+        # 3. GREATEST -> MAX
         sql = re.sub(r"\bGREATEST\b", "MAX", sql, flags=re.IGNORECASE)
+        # 4. (SELECT MAX(...) FROM ...) - INTERVAL 'X days' -> date((SELECT MAX(...) FROM ...), '-X days')
+        sql = re.sub(
+            r'([><=]+)\s*\(\s*SELECT\s+MAX\(([a-zA-Z0-9_\.]+)\)\s+FROM\s+([a-zA-Z0-9_\.]+)\s*\)\s*-\s*INTERVAL\s*\'(\d+)\s*days?\'',
+            r"\1 date((SELECT MAX(\2) FROM \3), '-\4 days')",
+            sql,
+            flags=re.IGNORECASE
+        )
+        # 5. CURRENT_DATE / NOW() - INTERVAL 'X days' -> date('now', '-X days')
+        sql = re.sub(
+            r'([><=]+)\s*(?:CURRENT_DATE|NOW\(\)|CURRENT_TIMESTAMP)\s*-\s*INTERVAL\s*\'(\d+)\s*days?\'',
+            r"\1 date('now', '-\2 days')",
+            sql,
+            flags=re.IGNORECASE
+        )
+        # 6. column - INTERVAL 'X days' -> date(column, '-X days')
+        sql = re.sub(
+            r'([><=]+)\s*([a-zA-Z0-9_\.]+)\s*-\s*INTERVAL\s*\'(\d+)\s*days?\'',
+            r"\1 date(\2, '-\3 days')",
+            sql,
+            flags=re.IGNORECASE
+        )
+        # 7. Generic fallback for any remaining INTERVAL
+        sql = re.sub(r"\s*-\s*INTERVAL\s*'(\d+)\s*days?'", r" - \1", sql, flags=re.IGNORECASE)
     return sql
 
 
