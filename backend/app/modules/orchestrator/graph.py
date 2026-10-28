@@ -1,8 +1,10 @@
 from typing import Dict, TypedDict, Any
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import SystemMessage
+from datetime import datetime
 import json
 import re
+from sqlalchemy import text
 
 from app.modules.orchestrator.intent import classify_intent
 from app.modules.orchestrator.llm import invoke_llm
@@ -39,23 +41,31 @@ def sql_node(state: GraphState):
     return {"context": context, "module_used": "SQL"}
 
 def general_node(state: GraphState):
-    """Fallback query handling with live SQL execution."""
-    from app.modules.text_to_sql.engine import run_text_to_sql
+    """General business consultant node for festivals, market trends, advice, and strategy (skips SQL)."""
+    current_date = datetime.now().strftime("%B %d, %Y")
     query = state["query"]
-    result = run_text_to_sql(query)
-    if result.get("data") and len(result["data"]) > 0:
-        context = (
-            f"Data Source: {result.get('source', 'Live PostgreSQL Database')}\n"
-            f"SQL Query executed: {result['sql']}\n"
-            f"Execution Result:\n{result['answer']}\n"
-            f"Raw data rows: {result['data']}"
-        )
-    else:
-        context = (
-            f"Data Source: {result.get('source', 'Live PostgreSQL Database')}\n"
-            f"Store data lookup: {result.get('answer', 'Koi records nahi mile.')}\n"
-            f"User question: {query}"
-        )
+    
+    # Store summary context (safe and lightweight, no raw SQL query on user input)
+    store_context = "Store Profile: Indian Retail / Grocery & FMCG SME Store"
+    db = SessionLocal()
+    try:
+        from sqlalchemy import text
+        cat_rows = db.execute(text("SELECT DISTINCT category FROM products LIMIT 10")).fetchall()
+        if cat_rows:
+            categories = [r[0] for r in cat_rows if r[0]]
+            store_context += f"\nActive Store Categories: {', '.join(categories)}"
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+    context = (
+        f"Mode: General Business Consultant & Market Intelligence (No SQL needed)\n"
+        f"Current Date: {current_date}\n"
+        f"{store_context}\n"
+        f"Topic: General business advice, upcoming festivals, market trends, pricing, or growth strategy.\n"
+        f"User Query: {query}"
+    )
     return {"context": context, "module_used": "general"}
 
 def forecasting_node(state: GraphState):
@@ -237,51 +247,64 @@ def alerts_node(state: GraphState):
     return {"context": context, "module_used": "alerts"}
 
 def synthesize_node(state: GraphState):
-    """Uses Groq to generate the final natural language answer grounded in exact facts & Hinglish."""
+    """Uses Groq to generate a smart, consultative business co-pilot response in friendly Hinglish."""
+    current_date = datetime.now().strftime("%B %d, %Y")
     query = state["query"]
     context = state.get("context", "")
 
-    prompt = f"""
-    You are BusinessGPT, a grounded, accurate, and practical AI business advisor for Indian SME store owners.
-    
-    CRITICAL FACTUALITY & ACCURACY RULES (MANDATORY & ABSOLUTE):
-    1. NEVER INVENT NUMBERS OR FACTS: Never hallucinate, guess, or invent numbers, sales amounts, stock quantities, percentages, product names, or date ranges.
-    2. USE EXACT DATA FROM CONTEXT: All numbers, revenue figures, product names, categories, stock levels, and calculations in your response MUST come directly and verbatim from the Context below.
-    3. PRODUCT NOT FOUND: If the context states that a product was not found or 0 records matched, state clearly that the product was "Not found" in the store database. DO NOT invent alternative fake products or assume default stock.
-    4. SOURCE IDENTIFICATION: Always preserve and state the exact data source mentioned in the context (e.g., "[Source: Live PostgreSQL Store Database (products/sales_data)]" or "[Source: Uploaded Dataset (<table_name>)]").
-    5. DATE RANGE TRANSPARENCY: If the available data covers a specific period (e.g. ~79-90 days), report that exact available window. NEVER claim or pretend the data covers 12 months or any unverified time range.
-    6. REORDER ADVICE: Only recommend products that are explicitly present in the Context. Never invent sample products or generic placeholders.
-    7. FORECAST ACCURACY: Report the genuine model predictions and holdout backtested MAPE from the Context. Never claim fabricated accuracy or constant baseline numbers.
-    8. LANGUAGE & SCRIPT:
-       - Respond in natural, conversational Hinglish (Latin/Roman alphabet).
-       - ABSOLUTELY NO DEVANAGARI SCRIPT (never use Devanagari letters like 'नमस्ते'). Always write phonetically in English letters.
-    9. CLEAN TABLE & OUTPUT FORMATTING:
-       - When presenting structured lists or comparisons, use clean GitHub-flavored Markdown tables.
-       - ALWAYS place an empty blank line before and after any Markdown table.
-       - Each table row MUST be on its own separate line (never merge or collapse table rows into a single continuous line).
-         Example:
-         | Product Name | Current Stock | Reorder Point | Shortage | Days Left |
-         |---|---|---|---|---|
-         | Fortune Sunflower Oil 1L | 7 | 20 | 13 | 0.9 |
-    
-    Context:
-    {context}
-    
-    User Query: {query}
-    """
+    prompt = f"""You are BusinessGPT — an intelligent AI business consultant for Indian SME owners. You have access to the owner's live store data (sales, inventory, bills) via SQL queries.
+
+Current Date: {current_date}
+
+For questions where store data is available:
+→ Clearly cite the authoritative data source in your answer (e.g., 'Data Source: Live Store Database' or 'Store database records ke mutabik').
+→ Use the data AND explain what it means in practical business terms.
+→ Provide actionable insights, highlight key numbers clearly, and use clean markdown tables or bullet points when helpful.
+
+For questions where a queried product was not found in the store database (0 matching items):
+→ Explicitly state that the product was not found in the database records (e.g. 'Store database mein is product ka koi record nahi mila' or 'Product not found in database').
+
+For general business questions (festivals, market trends, advice, pricing):
+→ Use your own knowledge to give helpful answers
+→ Connect it to their business context (Indian retail / FMCG / SME store)
+→ Include current date context ({current_date}) so you know which festivals and seasons are coming up right now.
+
+You speak in friendly Hinglish.
+Always write phonetically in the English / Latin alphabet (never use Devanagari script).
+
+Examples:
+Q: "aane waala festival konsa h?"
+A: "Diwali 20 October ko hai — abhi 5 din baad! Pichle festive seasons mein FMCG products ki demand 30-40% badhti hai. Aapka current stock check karke bata sakta hoon ki kya order karna chahiye — poochho?"
+
+Q: "market mein kya trend chal raha h?"
+A: "Abhi India mein healthy snacks, sugar-free products aur organic items ka trend strong hai. Aapke current product mix mein yeh categories hain kya?"
+
+Q: "sales kaise badhaye?"
+A: "Sales badhane ke liye 3 practical strategies hain:
+1. Festive Bundling: High-margin items ko fast-moving items ke saath combo banayein.
+2. Fast-Selling Stock: Top products hamesha in-stock rakhein taaki customer wapas na jaye.
+3. WhatsApp Loyalty: Regular customers ko naye offers aur arrival alerts bhejein.
+Aapke store ka top-selling item check karein?"
+
+Context:
+{context}
+
+User Query: {query}
+"""
 
     try:
-        response = invoke_llm([SystemMessage(content=prompt)], temperature=0.1)
+        response = invoke_llm([SystemMessage(content=prompt)], temperature=0.3)
         response_text = response.content
 
         # Failsafe: Ensure zero Devanagari script appears in output
         if re.search(r'[\u0900-\u097F]', response_text):
             fix_prompt = (
+                f"Today's Date: {current_date}\n\n"
                 "Rewrite the following text into conversational HINGLISH written STRICTLY using the ENGLISH / LATIN ALPHABET. "
                 "DO NOT USE ANY DEVANAGARI HINDI SCRIPT:\n\n"
                 f"{response_text}"
             )
-            converted = invoke_llm([SystemMessage(content=fix_prompt)], temperature=0.1)
+            converted = invoke_llm([SystemMessage(content=fix_prompt)], temperature=0.2)
             if not re.search(r'[\u0900-\u097F]', converted.content):
                 response_text = converted.content
 
@@ -290,8 +313,9 @@ def synthesize_node(state: GraphState):
         error_hint = str(e)
         if context and context.strip():
             fallback = (
-                f"⚠️ AI response generation abhi unavailable hai ({error_hint})\n\n"
-                f"Raw data:\n\n{context}"
+                f"Data Source: Live Store Database\n\n"
+                f"{context}\n\n"
+                f"(Note: AI response generation temporarily rate-limited: {error_hint})"
             )
         else:
             fallback = (

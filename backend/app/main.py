@@ -10,6 +10,9 @@ from app.modules.inventory.router import router as legacy_inventory_router
 from app.modules.alerts.router import router as alerts_router
 from app.modules.health.router import router as health_router
 from app.modules.reports.router import router as reports_router
+from app.modules.market_intel.router import router as market_intel_router
+from app.modules.whatsapp.router import router as whatsapp_router
+from app.api.voice import router as voice_router
 from app.modules.alerts.scheduler import start_scheduler, stop_scheduler
 from app.core.seed import seed_database
 
@@ -78,6 +81,9 @@ app.include_router(forecast_router, prefix="/api", tags=["forecasting"])
 app.include_router(alerts_router, prefix="/api", tags=["alerts"])
 app.include_router(health_router, prefix="/api", tags=["health"])
 app.include_router(reports_router, prefix="/api", tags=["reports"])
+app.include_router(market_intel_router, prefix="/api", tags=["market_intel"])
+app.include_router(voice_router, prefix="/api", tags=["voice"])
+app.include_router(whatsapp_router, prefix="/api/whatsapp", tags=["whatsapp"])
 
 
 @app.get("/")
@@ -128,4 +134,3 @@ def db_status():
             "error": str(e),
             "traceback": traceback.format_exc()
         }
-

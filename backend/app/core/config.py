@@ -46,12 +46,25 @@ class Settings(BaseSettings):
     @classmethod
     def validate_database_url(cls, v: str) -> str:
         return _normalize_database_url(v)
+
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "").strip()
     NEWSAPI_KEY: str = os.getenv("NEWSAPI_KEY", "").strip()
-    # Twilio — Phase 7
+
+    # Twilio / WhatsApp Configuration
     TWILIO_ACCOUNT_SID: str = os.getenv("TWILIO_ACCOUNT_SID", "").strip()
     TWILIO_AUTH_TOKEN: str = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
-    TWILIO_WHATSAPP_NUMBER: str = os.getenv("TWILIO_WHATSAPP_NUMBER", "whatsapp:+14155238886").strip()
+    # Support both TWILIO_WHATSAPP_FROM and TWILIO_WHATSAPP_NUMBER
+    TWILIO_WHATSAPP_FROM: str = (os.getenv("TWILIO_WHATSAPP_FROM") or os.getenv("TWILIO_WHATSAPP_NUMBER") or "whatsapp:+14155238886").strip()
+    TWILIO_WHATSAPP_NUMBER: str = (os.getenv("TWILIO_WHATSAPP_FROM") or os.getenv("TWILIO_WHATSAPP_NUMBER") or "whatsapp:+14155238886").strip()
+    WHATSAPP_WEBHOOK_BASE_URL: str = os.getenv("WHATSAPP_WEBHOOK_BASE_URL", "").strip()
+    WHATSAPP_DAILY_DIGEST_ENABLED: bool = os.getenv("WHATSAPP_DAILY_DIGEST_ENABLED", "false").lower() in ("true", "1", "yes")
+    WHATSAPP_DAILY_DIGEST_TIME: str = os.getenv("WHATSAPP_DAILY_DIGEST_TIME", "09:00").strip()
+    WHATSAPP_STORE_TIMEZONE: str = os.getenv("WHATSAPP_STORE_TIMEZONE", "Asia/Kolkata").strip()
+
+    # Voice / Whisper Configuration
+    GROQ_WHISPER_MODEL: str = os.getenv("GROQ_WHISPER_MODEL", "whisper-large-v3").strip()
+    MAX_AUDIO_UPLOAD_SIZE_MB: int = int(os.getenv("MAX_AUDIO_UPLOAD_SIZE_MB", "25"))
+
     # Production / Deployment
     OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").strip()
     CHROMA_PERSIST_DIR: str = os.getenv("CHROMA_PERSIST_DIR", "").strip()

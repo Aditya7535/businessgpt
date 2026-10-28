@@ -17,7 +17,7 @@ def sanitize_identifier(name: str) -> str:
         return "col"
     s = re.sub(r'[^a-zA-Z0-9_]+', '_', str(name).strip()).lower().strip('_')
     if not s:
-        s = "col"
+        return "col"
     if s[0].isdigit():
         s = f"col_{s}"
     return s[:55]
@@ -57,7 +57,7 @@ def create_uploaded_table(
 
     df.columns = cleaned_columns
 
-    # Write to PostgreSQL
+    # Write to database
     try:
         df.to_sql(name=table_name, con=engine, if_exists="replace", index=False)
         logger.info(f"Successfully created table '{table_name}' with {len(df)} rows and columns: {cleaned_columns}")
@@ -90,7 +90,7 @@ def create_uploaded_table(
 def get_all_uploaded_tables_metadata(db: Optional[Session] = None) -> List[Dict[str, Any]]:
     """
     Retrieves metadata (table name, filename, row count, columns) for all
-    dynamically created uploaded dataset tables in PostgreSQL.
+    dynamically created uploaded dataset tables in PostgreSQL / SQLite.
     """
     should_close = False
     if db is None:
@@ -98,21 +98,29 @@ def get_all_uploaded_tables_metadata(db: Optional[Session] = None) -> List[Dict[
         should_close = True
 
     try:
-        # Fetch columns from PostgreSQL information_schema
-        sql_cols = """
-        SELECT table_name, column_name, data_type 
-        FROM information_schema.columns 
-        WHERE table_schema = 'public' AND table_name LIKE 'uploaded_%' 
-        ORDER BY table_name, ordinal_position;
-        """
-        rows = db.execute(text(sql_cols)).fetchall()
-
+        is_sqlite = db.bind.dialect.name == "sqlite" if db.bind else False
         table_cols_map: Dict[str, List[Dict[str, str]]] = {}
-        for r in rows:
-            tname, cname, dtype = r[0], r[1], r[2]
-            if tname not in table_cols_map:
-                table_cols_map[tname] = []
-            table_cols_map[tname].append({"column": cname, "type": dtype})
+
+        if is_sqlite:
+            # Query sqlite_master for uploaded tables
+            tables = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'uploaded_%'")).fetchall()
+            for (tname,) in tables:
+                col_rows = db.execute(text(f"PRAGMA table_info({tname})")).fetchall()
+                table_cols_map[tname] = [{"column": cr[1], "type": cr[2]} for cr in col_rows]
+        else:
+            # Fetch columns from PostgreSQL information_schema
+            sql_cols = """
+            SELECT table_name, column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' AND table_name LIKE 'uploaded_%' 
+            ORDER BY table_name, ordinal_position;
+            """
+            rows = db.execute(text(sql_cols)).fetchall()
+            for r in rows:
+                tname, cname, dtype = r[0], r[1], r[2]
+                if tname not in table_cols_map:
+                    table_cols_map[tname] = []
+                table_cols_map[tname].append({"column": cname, "type": dtype})
 
         # Fetch associated Dataset metadata if available
         datasets = db.query(Dataset).filter(Dataset.table_name.isnot(None)).all()
@@ -140,7 +148,7 @@ def get_all_uploaded_tables_metadata(db: Optional[Session] = None) -> List[Dict[
 
 def backfill_existing_datasets():
     """
-    Backfills PostgreSQL tables for any datasets in the database that don't have a table yet.
+    Backfills database tables for any datasets in the database that don't have a table yet.
     """
     db = SessionLocal()
     try:

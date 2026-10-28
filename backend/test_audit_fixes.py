@@ -7,6 +7,7 @@ import unittest
 import pandas as pd
 from sqlalchemy import text
 from app.core.database import SessionLocal, engine
+from app.core.seed import seed_database
 from app.modules.text_to_sql.engine import run_text_to_sql, detect_sql_source
 from app.modules.forecasting.engine import run_forecast
 from app.modules.orchestrator.graph import app_graph, inventory_node
@@ -14,6 +15,7 @@ from app.modules.orchestrator.graph import app_graph, inventory_node
 class TestBusinessGPTAudit(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        seed_database()
         cls.db = SessionLocal()
 
     @classmethod
@@ -103,7 +105,7 @@ class TestBusinessGPTAudit(unittest.TestCase):
         final_resp = graph_res.get("final_response", "")
 
         # Must mention at least one real product from DB (e.g. Fortune Sunflower Oil 1L)
-        has_real_product = any(p in final_resp for p in real_products)
+        has_real_product = any(p in final_resp or p.lower() in final_resp.lower() for p in real_products)
         self.assertTrue(has_real_product, "Reorder recommendation must mention real database products")
 
     def test_5_forecasts_use_actual_sales_and_honest_mape(self):

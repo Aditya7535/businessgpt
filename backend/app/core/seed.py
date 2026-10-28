@@ -18,9 +18,9 @@ logger = logging.getLogger("businessgpt.seed")
 
 
 DEFAULT_USERS = [
-    {"name": "Aditya (Owner)", "role": "OWNER", "pin": "1111"},
-    {"name": "Rajesh (Manager)", "role": "MANAGER", "pin": "2222"},
-    {"name": "Pooja (Counter)", "role": "EMPLOYEE", "pin": "3333"},
+    {"name": "Aditya (Owner)", "role": "OWNER", "pin": "1111", "phone": "+919876543210"},
+    {"name": "Rajesh (Manager)", "role": "MANAGER", "pin": "2222", "phone": "+919876543211"},
+    {"name": "Pooja (Counter)", "role": "EMPLOYEE", "pin": "3333", "phone": "+919876543212"},
 ]
 
 DEFAULT_PRODUCTS = [
@@ -134,12 +134,42 @@ DEFAULT_PRODUCTS = [
     },
 ]
 
+def _ensure_schema_migrations(eng):
+    try:
+        from sqlalchemy import text
+        with eng.connect() as conn:
+            is_sqlite = eng.dialect.name == "sqlite"
+            if is_sqlite:
+                cols = [r[1] for r in conn.execute(text("PRAGMA table_info(users)")).fetchall()]
+                if "phone" not in cols:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(30)"))
+                wa_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(whatsapp_registrations)")).fetchall()]
+                if "user_id" not in wa_cols:
+                    conn.execute(text("ALTER TABLE whatsapp_registrations ADD COLUMN user_id INTEGER"))
+                if "opt_in_digest" not in wa_cols:
+                    conn.execute(text("ALTER TABLE whatsapp_registrations ADD COLUMN opt_in_digest BOOLEAN DEFAULT 1"))
+                if "opt_in_alerts" not in wa_cols:
+                    conn.execute(text("ALTER TABLE whatsapp_registrations ADD COLUMN opt_in_alerts BOOLEAN DEFAULT 1"))
+                if "last_digest_date" not in wa_cols:
+                    conn.execute(text("ALTER TABLE whatsapp_registrations ADD COLUMN last_digest_date VARCHAR(20)"))
+                conn.commit()
+            else:
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(30)"))
+                conn.execute(text("ALTER TABLE whatsapp_registrations ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL"))
+                conn.execute(text("ALTER TABLE whatsapp_registrations ADD COLUMN IF NOT EXISTS opt_in_digest BOOLEAN DEFAULT TRUE"))
+                conn.execute(text("ALTER TABLE whatsapp_registrations ADD COLUMN IF NOT EXISTS opt_in_alerts BOOLEAN DEFAULT TRUE"))
+                conn.execute(text("ALTER TABLE whatsapp_registrations ADD COLUMN IF NOT EXISTS last_digest_date VARCHAR(20)"))
+                conn.commit()
+    except Exception as e:
+        logger.warning(f"Schema migration warning: {e}")
+
 def seed_database():
     """
     Idempotent database seeder.
     Creates schema tables and seeds initial users, products, sales_data, and alerts if empty.
     """
     Base.metadata.create_all(bind=engine)
+    _ensure_schema_migrations(engine)
     db: Session = SessionLocal()
 
     try:
@@ -151,7 +181,8 @@ def seed_database():
                 db.add(User(
                     name=u["name"],
                     role=u["role"],
-                    pin=hash_pin(u["pin"])
+                    pin=hash_pin(u["pin"]),
+                    phone=u.get("phone")
                 ))
             db.commit()
             logger.info("Users seeded successfully.")
@@ -243,7 +274,21 @@ def seed_database():
             db.commit()
             logger.info("Alerts seeded successfully.")
 
-        # 5. Seed Store Settings
+        # 5. Seed WhatsApp Registration
+        from app.models.whatsapp import WhatsAppRegistration
+        wa_count = db.query(WhatsAppRegistration).count()
+        if wa_count == 0:
+            owner = db.query(User).filter(User.role == "OWNER").first()
+            if owner and owner.phone:
+                db.add(WhatsAppRegistration(
+                    phone_number=owner.phone,
+                    user_id=owner.id,
+                    opt_in_digest=True,
+                    opt_in_alerts=True
+                ))
+                db.commit()
+
+        # 6. Seed Store Settings
         settings_count = db.query(StoreSetting).count()
         if settings_count == 0:
             logger.info("Seeding initial store settings...")

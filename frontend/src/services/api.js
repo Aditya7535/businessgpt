@@ -69,11 +69,35 @@ export const analyticsAPI = {
   getSummary: (days = 30) => api.get('/analytics/summary', { params: { days } }),
 }
 
+export const voiceAPI = {
+  transcribeAudio: (audioBlob, language = null) => {
+    const formData = new FormData()
+    formData.append('file', audioBlob, 'recording.webm')
+    if (language && language !== 'auto') {
+      formData.append('language', language)
+    }
+    return api.post('/voice/transcribe', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+}
+
 export const chatAPI = {
   sendMessage: (message, session_id = 'default') => api.post('/chat', { message, session_id }),
   getHistory: (session_id = 'default') => api.get('/chat/history', { params: { session_id } }),
   getSessions: () => api.get('/chat/sessions'),
   clearHistory: (session_id = null) => api.delete('/chat/history', { params: session_id ? { session_id } : {} }),
+  transcribeAudio: (audioBlob, language = null) => voiceAPI.transcribeAudio(audioBlob, language),
+}
+
+export const whatsappAPI = {
+  getStatus: () => api.get('/whatsapp/status'),
+  linkNumber: (phone_number, opt_in_digest = true, opt_in_alerts = true) =>
+    api.post('/whatsapp/link', { phone_number, opt_in_digest, opt_in_alerts }),
+  updatePreferences: (opt_in_digest, opt_in_alerts) =>
+    api.post('/whatsapp/preferences', { opt_in_digest, opt_in_alerts }),
+  testMessage: (message, phone = '+919876543210') =>
+    api.post('/whatsapp/test', null, { params: { message, phone } }),
 }
 
 export const alertsAPI = {
@@ -87,6 +111,11 @@ export const reportsAPI = {
   downloadReport: (filename) => {
     return `${API_BASE}/reports/download/${filename}`
   }
+}
+
+export const marketAPI = {
+  getSeasonal: () => api.get('/market/seasonal'),
+  getTrends: (category = 'Grocery', region = 'IN') => api.post('/market/trends', { category, region }),
 }
 
 export const settingsAPI = {

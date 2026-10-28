@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { chatAPI } from '../services/api'
+import { chatAPI, voiceAPI } from '../services/api'
 import {
   Terminal,
   Send,
@@ -16,7 +16,14 @@ import {
   MessageSquare,
   Clock,
   ChevronRight,
-  Layers
+  Layers,
+  Mic,
+  MicOff,
+  Square,
+  Loader2,
+  X,
+  Globe,
+  Settings2
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import ReactMarkdown from 'react-markdown'
@@ -55,6 +62,22 @@ export default function Chat() {
   const [inputMessage, setInputMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const chatBottomRef = useRef(null)
+
+  // ── Voice Input Recording State ──
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordingSeconds, setRecordingSeconds] = useState(0)
+  const [transcribing, setTranscribing] = useState(false)
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false)
+  const [voiceLanguage, setVoiceLanguage] = useState(() => {
+    return localStorage.getItem('businessgpt_voice_lang') || 'auto'
+  })
+  const [autoSendVoice, setAutoSendVoice] = useState(() => {
+    return localStorage.getItem('businessgpt_voice_autosend') === 'true'
+  })
+  const mediaRecorderRef = useRef(null)
+  const audioChunksRef = useRef([])
+  const recordingTimerRef = useRef(null)
+  const isCancelledRef = useRef(false)
 
   const suggestedCommands = [
     { label: 'Aaj ki sales summary do', query: 'Aaj ki sales summary aur total revenue batao' },
@@ -126,6 +149,129 @@ export default function Chat() {
       handleSend(q)
     }
   }, [location.state])
+
+  // Cleanup voice recording on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current)
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop()
+        mediaRecorderRef.current.stream?.getTracks().forEach((track) => track.stop())
+      }
+    }
+  }, [])
+
+  // ── Voice Input Methods ──
+  const startRecording = async () => {
+    isCancelledRef.current = false
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast.error('Microphone recording is not supported on this browser.')
+        return
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : MediaRecorder.isTypeSupported('audio/mp4')
+        ? 'audio/mp4'
+        : ''
+
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+      audioChunksRef.current = []
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data)
+        }
+      }
+
+      recorder.onstop = async () => {
+        // Release microphone device hardware
+        stream.getTracks().forEach((track) => track.stop())
+        if (recordingTimerRef.current) {
+          clearInterval(recordingTimerRef.current)
+        }
+
+        if (isCancelledRef.current) {
+          return
+        }
+
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' })
+        if (audioBlob.size < 400) {
+          toast.error('Voice recording was too brief. Please speak your question.')
+          return
+        }
+
+        setTranscribing(true)
+        const toastId = toast.loading('Transcribing voice with Groq Whisper...', { id: 'voice-transcribe' })
+
+        try {
+          const res = await voiceAPI.transcribeAudio(audioBlob, voiceLanguage)
+          const text = (res.data?.text || '').trim()
+          if (text) {
+            if (autoSendVoice) {
+              toast.success('Voice transcribed! Executing query...', { id: toastId })
+              handleSend(text)
+            } else {
+              setInputMessage((prev) => (prev ? `${prev} ${text}` : text))
+              toast.success('Voice transcribed! Review and edit before sending.', { id: toastId })
+            }
+          } else {
+            toast.error('No speech detected in audio. Please speak louder and retry.', { id: toastId })
+          }
+        } catch (err) {
+          console.error('Voice transcription error:', err)
+          const detail = err.response?.data?.detail || err.message || 'Voice transcription failed.'
+          toast.error(detail, { id: toastId })
+        } finally {
+          setTranscribing(false)
+        }
+      }
+
+      mediaRecorderRef.current = recorder
+      recorder.start(250)
+      setIsRecording(true)
+      setRecordingSeconds(0)
+
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1)
+      }, 1000)
+    } catch (err) {
+      console.error('Microphone permission error:', err)
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        toast.error('Microphone permission denied. Please allow audio access in your browser.')
+      } else {
+        toast.error('Failed to access microphone or hardware device error.')
+      }
+    }
+  }
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      isCancelledRef.current = false
+      mediaRecorderRef.current.stop()
+      setIsRecording(false)
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current)
+      }
+    }
+  }
+
+  const cancelRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      isCancelledRef.current = true
+      audioChunksRef.current = []
+      mediaRecorderRef.current.stop()
+      setIsRecording(false)
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current)
+      }
+      toast('Voice recording discarded', { icon: '🗑️' })
+    }
+  }
 
   // Start a new chat session
   const handleNewChat = () => {
@@ -359,124 +505,76 @@ export default function Chat() {
             </div>
           )}
         </div>
-
-        {/* Engine Pipeline Status (Docked at bottom) */}
-        <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-surface)] space-y-1.5">
-          <div className="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider">Active Engines</div>
-          <div className="space-y-1 font-mono text-[11px]">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-[var(--text-main)]">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                PostgreSQL SQL
-              </span>
-              <span className="text-[10px] text-emerald-500">Connected</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-[var(--text-main)]">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                Groq Llama-3 70B
-              </span>
-              <span className="text-[10px] text-blue-500">Active</span>
-            </div>
-          </div>
-        </div>
       </div>
 
-      {/* ── CENTER PANEL: Terminal Chat Stream ── */}
+      {/* ── RIGHT PANEL: Main Chat Screen ── */}
       <div className="flex-1 flex flex-col os-surface overflow-hidden">
-        {/* Terminal Title Bar */}
-        <div className="h-11 border-b border-[var(--border-color)] px-4 flex items-center justify-between bg-[var(--bg-surface)]">
+        {/* Terminal Header */}
+        <div className="p-3.5 border-b border-[var(--border-color)] flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500/80"></span>
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80"></span>
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80"></span>
-            </div>
-            <span className="text-xs font-mono font-medium text-[var(--text-muted)] ml-2">
-              bash: businessgpt --bi-terminal
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-main)]">
+              AI Business Co-Pilot
             </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
-              {sessionId}
+            <span className="text-[10px] font-mono text-[var(--text-muted)]">
+              (Live PostgreSQL & Groq LLM)
             </span>
           </div>
-          <div className="flex items-center gap-3">
+
+          <div className="flex items-center gap-2">
             <button
-              onClick={handleNewChat}
-              className="lg:hidden flex items-center gap-1 text-xs text-blue-500 font-semibold cursor-pointer"
+              onClick={() => handleSend('Aaj ki total sales batao')}
+              disabled={loading}
+              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[11px] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors cursor-pointer"
             >
-              <Plus size={14} /> New
+              <RotateCcw size={11} />
+              <span>Today's Sales</span>
             </button>
-            <div className="flex items-center gap-1.5 text-[10px] font-mono text-[var(--text-muted)]">
-              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-              <span>Online</span>
-            </div>
           </div>
         </div>
 
-        {/* Chat Stream */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 font-mono text-xs">
+        {/* Message Thread */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {historyLoading ? (
-            <div className="p-4 text-center text-xs text-[var(--text-muted)] animate-pulse">
-              Loading chat history...
+            <div className="py-12 text-center text-xs text-[var(--text-muted)] font-mono animate-pulse">
+              Loading session history...
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="py-12 text-center text-xs text-[var(--text-muted)]">
+              Type or speak a question to begin.
             </div>
           ) : (
             messages.map((msg) => {
               const isUser = msg.role === 'user'
+
               return (
                 <div
                   key={msg.id}
-                  className={`p-4 rounded-xl border transition-all ${
-                    isUser
-                      ? 'border-blue-500/30 bg-blue-500/5 text-[var(--text-main)] ml-auto max-w-2xl'
-                      : 'border-[var(--border-color)] bg-[var(--bg-surface-elevated)] text-[var(--text-main)] mr-auto max-w-3xl w-full'
-                  }`}
+                  className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
                 >
-                  {/* Meta Header */}
-                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-[var(--border-color)]">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-[11px] text-[var(--text-main)]">
-                        {isUser ? '> user@counter' : 'businessgpt@os'}
-                      </span>
-                      {!isUser && getModuleBadge(msg.module)}
-                    </div>
-                    <span className="text-[10px] text-[var(--text-muted)]">{msg.timestamp}</span>
+                  <div className="flex items-center gap-2 mb-1 px-1">
+                    {!isUser && getModuleBadge(msg.module)}
+                    <span className="text-[10px] font-mono text-[var(--text-muted)]">
+                      {isUser ? 'You' : 'BusinessGPT'} &middot; {msg.timestamp}
+                    </span>
                   </div>
 
-                  {/* Message Body */}
                   {isUser ? (
-                    <div className="whitespace-pre-wrap leading-relaxed text-[13px] font-sans">
+                    <div className="max-w-xl p-3 rounded-xl bg-blue-600 text-white text-xs font-medium leading-relaxed shadow-sm">
                       {msg.text}
                     </div>
                   ) : (
-                    <div className="text-[13px] font-sans text-[var(--text-main)]">
+                    <div className="max-w-2xl p-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface-elevated)] text-xs text-[var(--text-main)] leading-relaxed prose prose-invert max-w-none">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
-                          p: ({ node, ...props }) => <p className="leading-relaxed mb-2 last:mb-0" {...props} />,
-                          strong: ({ node, ...props }) => <strong className="font-semibold text-[var(--text-main)] dark:text-white" {...props} />,
-                          em: ({ node, ...props }) => <em className="italic text-[var(--text-main)]" {...props} />,
-                          ul: ({ node, ...props }) => <ul className="list-disc list-inside space-y-1 my-2 text-[var(--text-main)]" {...props} />,
-                          ol: ({ node, ...props }) => <ol className="list-decimal list-inside space-y-1 my-2 text-[var(--text-main)]" {...props} />,
-                          li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />,
-                          h1: ({ node, ...props }) => <h1 className="text-base font-bold text-[var(--text-main)] mt-3 mb-1" {...props} />,
-                          h2: ({ node, ...props }) => <h2 className="text-sm font-bold text-[var(--text-main)] mt-2.5 mb-1" {...props} />,
-                          h3: ({ node, ...props }) => <h3 className="text-xs font-bold text-[var(--text-main)] mt-2 mb-1" {...props} />,
-                          code: ({ node, inline, ...props }) => (
-                            <code className="bg-black/10 dark:bg-white/10 px-1.5 py-0.5 rounded font-mono text-[11px] text-amber-500 dark:text-amber-400" {...props} />
-                          ),
-                          pre: ({ node, ...props }) => (
-                            <pre className="bg-black/20 dark:bg-black/50 p-3 rounded-lg overflow-x-auto my-2 border border-[var(--border-color)] font-mono text-xs text-[var(--text-main)]" {...props} />
-                          ),
-                          blockquote: ({ node, ...props }) => (
-                            <blockquote className="border-l-2 border-blue-500 pl-3 my-2 italic text-[var(--text-muted)]" {...props} />
-                          ),
                           table: ({ node, ...props }) => (
                             <div className="overflow-x-auto my-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)]">
-                              <table className="w-full text-xs text-left border-collapse" {...props} />
+                              <table className="w-full text-left text-xs border-collapse" {...props} />
                             </div>
                           ),
-                          thead: ({ node, ...props }) => <thead className="bg-blue-500/10 text-[var(--text-main)] font-semibold border-b border-[var(--border-color)]" {...props} />,
-                          th: ({ node, ...props }) => <th className="px-3.5 py-2 font-semibold text-[var(--text-main)] border-r border-[var(--border-color)] last:border-r-0 whitespace-nowrap" {...props} />,
+                          thead: ({ node, ...props }) => <thead className="bg-blue-600/10 border-b border-[var(--border-color)] text-blue-400 font-mono text-[11px] uppercase tracking-wider" {...props} />,
+                          th: ({ node, ...props }) => <th className="px-3.5 py-2 font-bold whitespace-nowrap border-r border-[var(--border-color)] last:border-r-0" {...props} />,
                           td: ({ node, ...props }) => <td className="px-3.5 py-2 border-t border-[var(--border-color)] border-r border-[var(--border-color)] last:border-r-0 text-[var(--text-main)] whitespace-nowrap" {...props} />,
                           tr: ({ node, ...props }) => <tr className="hover:bg-blue-500/5 transition-colors odd:bg-transparent even:bg-[var(--bg-surface-elevated)]/40" {...props} />,
                         }}
@@ -505,10 +603,83 @@ export default function Chat() {
 
         {/* Terminal Input Bar */}
         <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-surface)]">
+          {/* Active Voice Recording Status Bar */}
+          {isRecording && (
+            <div className="mb-2 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center justify-between text-xs animate-in fade-in">
+              <div className="flex items-center gap-2 text-red-400 font-mono">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping inline-block" />
+                <span className="font-semibold">
+                  Recording ({Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')})
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)] hidden sm:inline">
+                  • Language: {voiceLanguage.toUpperCase()}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={cancelRecording}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[var(--bg-surface-elevated)] hover:bg-[var(--border-color)] text-[var(--text-muted)] hover:text-red-400 text-[11px] font-medium transition-colors cursor-pointer"
+                  aria-label="Cancel and discard recording"
+                >
+                  <X size={12} /> Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={stopRecording}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-red-600 hover:bg-red-500 text-white font-semibold text-[11px] transition-colors shadow-sm shadow-red-500/20 cursor-pointer"
+                  aria-label="Stop recording and transcribe"
+                >
+                  <Square size={11} /> Stop & Transcribe
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Voice Settings Bar (Collapsible) */}
+          {showVoiceSettings && (
+            <div className="mb-2 p-2.5 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] flex flex-wrap items-center justify-between gap-3 text-xs text-[var(--text-muted)]">
+              <div className="flex items-center gap-2">
+                <Globe size={13} className="text-blue-400" />
+                <span className="font-medium text-[var(--text-main)]">Voice Language Hint:</span>
+                <select
+                  value={voiceLanguage}
+                  onChange={(e) => {
+                    setVoiceLanguage(e.target.value)
+                    localStorage.setItem('businessgpt_voice_lang', e.target.value)
+                  }}
+                  className="px-2 py-1 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] text-xs text-[var(--text-main)] focus:outline-none"
+                >
+                  <option value="auto">Auto Detect (Hinglish / English / Hindi)</option>
+                  <option value="hi">Hindi (हिन्दी)</option>
+                  <option value="en">English</option>
+                  <option value="mr">Marathi (मराठी)</option>
+                </select>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={autoSendVoice}
+                  onChange={(e) => {
+                    setAutoSendVoice(e.target.checked)
+                    localStorage.setItem('businessgpt_voice_autosend', String(e.target.checked))
+                  }}
+                  className="rounded border-[var(--border-color)] text-blue-600 focus:ring-0 cursor-pointer"
+                />
+                <span className="text-[11px]">Auto-execute query after transcribing</span>
+              </label>
+            </div>
+          )}
+
           <form
             onSubmit={(e) => {
               e.preventDefault()
-              handleSend()
+              if (isRecording) {
+                stopRecording()
+              } else {
+                handleSend()
+              }
             }}
             className="flex items-center gap-2"
           >
@@ -520,16 +691,63 @@ export default function Chat() {
                 type="text"
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
-                placeholder="Ask numbers, revenue, inventory, or forecasting in English or Hinglish..."
-                disabled={loading}
+                placeholder={
+                  transcribing
+                    ? 'Transcribing voice input with Groq Whisper...'
+                    : isRecording
+                    ? 'Listening... Click Stop when finished speaking'
+                    : 'Ask numbers, revenue, inventory, or forecasting in English or Hinglish...'
+                }
+                disabled={loading || transcribing}
+                aria-label="Chat query input"
                 className="w-full pl-9 pr-4 py-2.5 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-xs text-[var(--text-main)] focus:outline-none focus:border-blue-500 font-sans"
               />
             </div>
 
+            {/* Voice Settings Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setShowVoiceSettings((prev) => !prev)}
+              className={`p-2.5 rounded-lg border transition-all text-xs cursor-pointer ${
+                showVoiceSettings
+                  ? 'bg-blue-600/20 text-blue-400 border-blue-500/40'
+                  : 'bg-[var(--bg-surface-elevated)] hover:bg-[var(--border-color)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-blue-400'
+              }`}
+              title="Voice settings (Language & Auto-execute)"
+              aria-label="Voice settings"
+            >
+              <Settings2 size={16} />
+            </button>
+
+            {/* Voice Input Microphone Recording Button */}
+            <button
+              type="button"
+              onClick={isRecording ? stopRecording : startRecording}
+              disabled={loading || transcribing}
+              className={`p-2.5 rounded-lg border transition-all text-xs font-semibold cursor-pointer ${
+                isRecording
+                  ? 'bg-red-600 text-white border-red-500 shadow-sm shadow-red-500/30 animate-pulse'
+                  : transcribing
+                  ? 'bg-blue-600/20 text-blue-400 border-blue-500/30 cursor-wait'
+                  : 'bg-[var(--bg-surface-elevated)] hover:bg-[var(--border-color)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-blue-500'
+              }`}
+              title={isRecording ? 'Stop recording & transcribe' : 'Record voice with Groq Whisper'}
+              aria-label={isRecording ? 'Stop recording & transcribe' : 'Record voice input'}
+            >
+              {transcribing ? (
+                <Loader2 size={16} className="animate-spin text-blue-400" />
+              ) : isRecording ? (
+                <Square size={16} className="text-white" />
+              ) : (
+                <Mic size={16} />
+              )}
+            </button>
+
             <button
               type="submit"
-              disabled={loading || !inputMessage.trim()}
+              disabled={loading || transcribing || !inputMessage.trim()}
               className="btn-accent px-4 py-2.5 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              aria-label="Execute chat query"
             >
               <Send size={14} />
               <span className="hidden sm:inline">Execute</span>

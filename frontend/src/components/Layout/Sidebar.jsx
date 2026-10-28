@@ -14,7 +14,8 @@ import {
   Store,
   Sparkles,
   LayoutDashboard,
-  Upload
+  Upload,
+  Compass
 } from 'lucide-react'
 
 export default function Sidebar() {
@@ -54,6 +55,12 @@ export default function Sidebar() {
       label: 'Analytics',
       icon: LineChart,
       roles: ['OWNER'],
+    },
+    {
+      to: '/market',
+      label: 'Market Trends',
+      icon: Compass,
+      roles: ['MANAGER', 'OWNER'],
     },
     {
       to: '/reports',

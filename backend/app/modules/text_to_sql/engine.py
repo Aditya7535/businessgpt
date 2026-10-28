@@ -90,8 +90,82 @@ def generate_fallback_sql(query: str, db=None) -> str:
     """Template fallback when LLM is unavailable."""
     q = query.lower()
 
-    # Check for critical / low stock queries
-    if "critical" in q or "low stock" in q or "kam stock" in q or "reorder" in q or "restock" in q:
+    # 1. Category counts
+    if "category" in q and ("count" in q or "kitne" in q or "how many" in q or "breakdown" in q or "wise" in q):
+        tbl_match = re.search(r'\b(uploaded_\d+_[a-zA-Z0-9_]+)\b', q)
+        if tbl_match:
+            return f"SELECT category, COUNT(*) AS product_count FROM {tbl_match.group(1)} GROUP BY category ORDER BY product_count DESC;"
+        return "SELECT category, COUNT(*) AS product_count FROM products GROUP BY category ORDER BY product_count DESC;"
+
+    # 2. Date / Month specific revenue and sales aggregations (e.g., August 2026, 2026-08)
+    month_days = {
+        "january": ("01", "31"), "february": ("02", "28"), "march": ("03", "31"),
+        "april": ("04", "30"), "may": ("05", "31"), "june": ("06", "30"),
+        "july": ("07", "31"), "august": ("08", "31"), "september": ("09", "30"),
+        "october": ("10", "31"), "november": ("11", "30"), "december": ("12", "31")
+    }
+    year_match = re.search(r'\b(202\d)\b', q)
+    year = year_match.group(1) if year_match else "2026"
+    for mname, (m_num, last_day) in month_days.items():
+        if mname in q:
+            start_date = f"{year}-{m_num}-01"
+            end_date = f"{year}-{m_num}-{last_day}"
+            return f"SELECT COALESCE(SUM(revenue), 0) as total_revenue, COALESCE(SUM(quantity_sold), 0) as total_units, COALESCE(SUM(revenue - cost), 0) as gross_profit FROM sales_data WHERE date >= '{start_date}' AND date <= '{end_date}';"
+
+    # 3. Check if query references uploaded dataset
+    if "uploaded" in q or "csv" in q or "dataset" in q or "file" in q:
+        tbl_match = re.search(r'\b(uploaded_\d+_[a-zA-Z0-9_]+)\b', q)
+        if tbl_match:
+            tname = tbl_match.group(1)
+            if "category" in q:
+                return f"SELECT category, COUNT(*) as product_count FROM {tname} GROUP BY category ORDER BY product_count DESC;"
+            if "how many" in q or "count" in q or "rows" in q:
+                return f"SELECT COUNT(*) AS total_rows FROM {tname};"
+            return f"SELECT * FROM {tname} LIMIT 10;"
+        try:
+            tables = get_all_uploaded_tables_metadata(db)
+            if tables:
+                latest_tbl = tables[-1]
+                tname = latest_tbl["table_name"]
+                cols = [c["column"] for c in latest_tbl["columns"]]
+                if "category" in q and "category" in cols:
+                    return f"SELECT category, COUNT(*) as product_count FROM {tname} GROUP BY category ORDER BY product_count DESC;"
+                if "how many" in q or "count" in q or "rows" in q or "kitne" in q:
+                    return f"SELECT COUNT(*) AS total_rows FROM {tname};"
+                rev_col = next((c for c in cols if "rev" in c or "sales" in c or "amount" in c), None)
+                if rev_col:
+                    return f"SELECT COALESCE(SUM({rev_col}), 0) AS total_{rev_col}, COUNT(*) AS total_records FROM {tname};"
+                return f"SELECT * FROM {tname} LIMIT 10;"
+        except Exception:
+            pass
+
+    # 4. Check for specific product lookup in products table
+    # Pattern 1: "<product_name> ka stock / price / kitna"
+    # Pattern 2: "stock / price of <product_name>"
+    prod_pat = re.search(r'(?:what is the\s+)?(?:stock|price|rate|mrp|cost|keemat|kimat)\s+(?:of|for)\s+([a-zA-Z0-9_\-\s]+?)(?:\?|$|\s+in\b|\s+at\b)', q)
+    if not prod_pat:
+        prod_pat = re.search(r'([a-zA-Z0-9_\-]+)\s+(?:ka|ki|ke)?\s*(?:stock|price|rate|mrp|cost|keemat|kimat|bhav)(?:\s+kitna|\s+kitne|\s+kya|\s+hai|\?|$)', q)
+
+    if prod_pat:
+        target = prod_pat.group(1).strip()
+        stop_words = {"total", "kul", "sab", "all", "low", "critical", "kam", "out of", "store", "aaj", "today", "month", "mahina", "category", "product", "products", "item", "items"}
+        if target and target.lower() not in stop_words and len(target) > 2:
+            if any(p in q for p in ["price", "rate", "cost", "keemat", "kimat", "mrp", "bhav"]):
+                return f"SELECT name, unit_price FROM products WHERE name ILIKE '%{target}%' LIMIT 50;"
+            else:
+                return f"SELECT name, current_stock, unit, reorder_point FROM products WHERE name ILIKE '%{target}%' LIMIT 50;"
+
+    for term in ["colgate", "basmati", "tata salt", "sunflower oil", "fortune", "atta", "maggi", "parle", "bhujia", "dettol", "amul", "surf excel"]:
+        if term in q:
+            if any(p in q for p in ["price", "rate", "cost", "keemat", "kimat", "mrp"]):
+                return f"SELECT name, unit_price FROM products WHERE name ILIKE '%{term}%' LIMIT 50;"
+            elif any(s in q for s in ["stock", "quantity", "bacha", "available"]):
+                return f"SELECT name, current_stock, unit, reorder_point FROM products WHERE name ILIKE '%{term}%' LIMIT 50;"
+            else:
+                return f"SELECT id, name, sku, category, unit_price, current_stock, reorder_point, unit FROM products WHERE name ILIKE '%{term}%' LIMIT 50;"
+
+    # 5. Critical / low stock queries (when no specific product was asked)
+    if "critical" in q or "low stock" in q or "kam stock" in q:
         return """
             SELECT 
                 p.id, p.name, p.sku, p.category, p.current_stock, p.reorder_point, p.unit, p.unit_price,
@@ -108,38 +182,8 @@ def generate_fallback_sql(query: str, db=None) -> str:
             LIMIT 50;
         """.strip()
 
-    # Category counts
-    if "category" in q and ("count" in q or "kitne" in q or "how many" in q or "breakdown" in q):
-        return "SELECT category, COUNT(*) AS product_count FROM products GROUP BY category ORDER BY product_count DESC;"
-
-    # Check for specific product queries in products table
-    for term in ["colgate", "basmati", "tata salt", "oil", "maggi", "parle", "bhujia", "dettol", "amul", "atta", "surf excel"]:
-        if term in q:
-            if "price" in q or "rate" in q or "cost" in q or "keemat" in q or "mrp" in q:
-                return f"SELECT name, unit_price FROM products WHERE name ILIKE '%{term}%' LIMIT 50;"
-            elif "stock" in q or "quantity" in q or "bacha" in q or "available" in q:
-                return f"SELECT name, current_stock, unit, reorder_point FROM products WHERE name ILIKE '%{term}%' LIMIT 50;"
-            else:
-                return f"SELECT id, name, sku, category, unit_price, current_stock, reorder_point, unit FROM products WHERE name ILIKE '%{term}%' LIMIT 50;"
-
-    # Check if query references uploaded dataset
-    if "uploaded" in q or "csv" in q or "dataset" in q or "file" in q:
-        try:
-            tables = get_all_uploaded_tables_metadata(db)
-            if tables:
-                latest_tbl = tables[-1]
-                tname = latest_tbl["table_name"]
-                cols = [c["column"] for c in latest_tbl["columns"]]
-                if "how many" in q or "count" in q or "rows" in q or "kitne" in q:
-                    return f"SELECT COUNT(*) AS total_rows FROM {tname};"
-                rev_col = next((c for c in cols if "rev" in c or "sales" in c or "amount" in c), None)
-                if rev_col:
-                    return f"SELECT COALESCE(SUM({rev_col}), 0) AS total_{rev_col}, COUNT(*) AS total_records FROM {tname};"
-                return f"SELECT * FROM {tname} LIMIT 10;"
-        except Exception:
-            pass
-
-    if "total revenue" in q or "kul kamai" in q or "bikri" in q or "sales" in q:
+    # 6. Total revenue / sales aggregations
+    if "total revenue" in q or "kul kamai" in q or "bikri" in q or "sales" in q or "revenue" in q:
         if "today" in q or "aaj" in q:
             return "SELECT COALESCE(SUM(revenue), 0) as total_revenue, COALESCE(SUM(quantity_sold), 0) as total_units FROM sales_data WHERE date = (SELECT MAX(date) FROM sales_data);"
         if "month" in q or "mahine" in q:
@@ -280,7 +324,7 @@ def synthesize_sql_answer(query: str, sql: str, rows: List[Dict[str, Any]], sour
 
     if not rows:
         # Check if the query looked for a specific product name
-        prod_match = re.search(r"ILIKE\s+'%([^%']+)%'", sql, re.IGNORECASE)
+        prod_match = re.search(r"(?:ILIKE|LIKE)\s+'%([^%']+)%'", sql, re.IGNORECASE)
         if prod_match:
             searched_item = prod_match.group(1)
             return (

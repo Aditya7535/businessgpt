@@ -16,6 +16,7 @@ import Reports from './pages/Reports'
 import Alerts from './pages/Alerts'
 import Settings from './pages/Settings'
 import Upload from './pages/Upload'
+import Market from './pages/Market'
 
 // Route Guard Component
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -95,6 +96,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute allowedRoles={['OWNER']}>
                 <Analytics />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/market"
+            element={
+              <ProtectedRoute allowedRoles={['MANAGER', 'OWNER']}>
+                <Market />
               </ProtectedRoute>
             }
           />

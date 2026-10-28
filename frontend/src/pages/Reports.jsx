@@ -41,32 +41,32 @@ export default function Reports() {
 
   const handleDownload = async (filename) => {
     try {
-      const token = localStorage.getItem('token') || localStorage.getItem('businessgpt_token');
+      const token = localStorage.getItem('token') || localStorage.getItem('businessgpt_token')
+      const downloadUrl = reportsAPI.downloadReport(filename)
       const response = await fetch(
-        `http://localhost:8000/api/reports/download/${filename}`,
+        downloadUrl,
         { 
           headers: { 
-            Authorization: `Bearer ${token}` 
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
           }
         }
-      );
-      if (!response.ok) throw new Error('Download failed');
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      toast.success('Report downloaded successfully!');
+      )
+      if (!response.ok) throw new Error('Download failed')
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+      toast.success('Report downloaded successfully!')
     } catch (error) {
-      console.error('Download error:', error);
-      alert('Download failed: ' + error.message);
+      console.error('Download error:', error)
+      toast.error('Download failed: ' + error.message)
     }
-  };
-
+  }
 
   return (
     <motion.div

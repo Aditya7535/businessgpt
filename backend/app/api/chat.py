@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
+import time
+import logging
+from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
@@ -6,10 +8,17 @@ from sqlalchemy import func, desc
 from app.core.database import get_db
 from app.modules.orchestrator.graph import app_graph
 from app.core.auth import require_role
+from app.core.config import settings
 from app.models.user import User
 from app.models.chat_message import ChatMessage
 
+logger = logging.getLogger("businessgpt.chat")
+
 router = APIRouter()
+
+ALLOWED_AUDIO_EXTENSIONS = {".webm", ".wav", ".mp3", ".m4a", ".ogg", ".flac", ".mp4"}
+ALLOWED_AUDIO_MIME_PREFIXES = ("audio/", "video/webm", "video/mp4")
+MAX_AUDIO_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
 
 class ChatRequest(BaseModel):
     session_id: str = "default"
@@ -97,6 +106,77 @@ async def chat_endpoint(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error executing orchestrator: {str(e)}")
+
+@router.post("/chat/transcribe")
+async def transcribe_audio_endpoint(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_role(["OWNER", "MANAGER", "EMPLOYEE"]))
+):
+    """
+    Transcribes recorded audio using Groq Whisper.
+    Validates audio format and file size.
+    Never exposes API keys to client.
+    """
+    if not settings.GROQ_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="Voice transcription service is not configured on the server (GROQ_API_KEY missing)."
+        )
+
+    filename = file.filename or "recording.webm"
+    ext = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
+    content_type = (file.content_type or "").lower()
+
+    is_valid_type = (ext in ALLOWED_AUDIO_EXTENSIONS) or any(content_type.startswith(p) for p in ALLOWED_AUDIO_MIME_PREFIXES)
+    if not is_valid_type:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported audio format '{content_type or ext}'. Supported formats: WebM, WAV, MP3, M4A, OGG, FLAC."
+        )
+
+    try:
+        content = await file.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read audio file: {str(e)}")
+
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded audio file is empty.")
+
+    if len(content) > MAX_AUDIO_SIZE_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Audio file exceeds maximum size limit of 25MB (received {len(content) / (1024*1024):.1f}MB)."
+        )
+
+    try:
+        from groq import Groq
+        client = Groq(api_key=settings.GROQ_API_KEY)
+
+        # Standardize upload filename for Whisper if missing extension
+        safe_filename = filename if ext in ALLOWED_AUDIO_EXTENSIONS else f"audio_{int(time.time())}.webm"
+
+        transcription = client.audio.transcriptions.create(
+            file=(safe_filename, content),
+            model="whisper-large-v3",
+            prompt="Indian retail SME store, Hinglish, sales, stock, products, bills, customer orders",
+            response_format="json",
+            temperature=0.0
+        )
+
+        transcribed_text = (transcription.text or "").strip()
+        if not transcribed_text:
+            return {"text": "", "status": "empty", "message": "No speech detected in audio."}
+
+        return {"text": transcribed_text}
+
+    except Exception as e:
+        error_str = str(e)
+        logger.error(f"Groq Whisper transcription error: {error_str}", exc_info=True)
+        if "401" in error_str or "invalid_api_key" in error_str.lower():
+            raise HTTPException(status_code=502, detail="Groq API key is invalid or expired.")
+        elif "429" in error_str or "rate_limit" in error_str.lower():
+            raise HTTPException(status_code=429, detail="Groq voice transcription rate limit reached. Please wait a moment.")
+        raise HTTPException(status_code=500, detail=f"Voice transcription failed: {error_str[:120]}")
 
 @router.get("/chat/history", response_model=List[ChatMessageItem])
 def get_chat_history(
