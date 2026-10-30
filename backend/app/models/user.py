@@ -6,6 +6,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
+    store_id = Column(Integer, nullable=False, default=1, index=True)
     name = Column(String(100), nullable=False)
     role = Column(String(20), nullable=False, index=True)  # EMPLOYEE, MANAGER, OWNER
     pin = Column(String(255), nullable=False)

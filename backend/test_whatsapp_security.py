@@ -9,7 +9,7 @@ class TestWhatsAppSecurity(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.test_app = FastAPI()
-        cls.test_app.include_router(whatsapp_router, prefix="/api")
+        cls.test_app.include_router(whatsapp_router, prefix="/api/whatsapp")
         cls.client = TestClient(cls.test_app)
 
     def test_1_webhook_rejected_when_credentials_missing(self):

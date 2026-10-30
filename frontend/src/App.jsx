@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import Layout from './components/Layout/Layout'
 import CommandPalette from './components/CommandPalette'
 
+import StoryLanding from './pages/StoryLanding'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import POS from './pages/POS'
@@ -24,8 +25,13 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 
   if (loading) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-[var(--bg-main)] text-[var(--text-muted)] font-mono text-xs">
-        Initializing BusinessGPT Console...
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[var(--bg-main)] text-[var(--text-main)] font-sans gap-3">
+        <div className="w-8 h-8 rounded-[3px] bg-[var(--accent)] border-2 border-[var(--border-strong)] flex items-center justify-center text-[var(--accent-ink)] font-mono font-extrabold shadow-[2px_2px_0px_var(--border-strong)] animate-pulse">
+          B
+        </div>
+        <div className="text-xs font-mono text-[var(--text-dim)] uppercase tracking-wider">
+          Initializing The Story of Your Business...
+        </div>
       </div>
     )
   }
@@ -35,7 +41,8 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   }
 
   if (allowedRoles && !hasRole(allowedRoles)) {
-    return <Navigate to="/dashboard" replace />
+    const fallback = user?.role === 'EMPLOYEE' ? '/pos' : '/dashboard'
+    return <Navigate to={fallback} replace />
   }
 
   return children
@@ -47,10 +54,14 @@ function AppRoutes() {
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
-        {/* Public Login */}
+        {/* Cinematic Storytelling Start Screen (Public) */}
+        <Route path="/" element={<StoryLanding />} />
+        <Route path="/story" element={<StoryLanding />} />
+
+        {/* Public Login Kiosk */}
         <Route path="/login" element={<Login />} />
 
-        {/* Authenticated Layout */}
+        {/* Authenticated Application Console */}
         <Route
           element={
             <ProtectedRoute>
@@ -58,7 +69,6 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         >
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route
             path="/dashboard"
             element={
@@ -141,7 +151,7 @@ function AppRoutes() {
           />
         </Route>
 
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AnimatePresence>
   )
@@ -156,10 +166,10 @@ export default function App() {
           toastOptions={{
             className: 'font-mono text-xs',
             style: {
-              background: '#111111',
-              color: '#F3F4F6',
-              border: '1px solid #333333',
-              borderRadius: '8px',
+              background: 'var(--bg-surface-elevated)',
+              color: 'var(--text-main)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '10px',
             },
           }}
         />

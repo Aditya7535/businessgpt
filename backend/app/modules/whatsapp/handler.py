@@ -43,17 +43,27 @@ def _send_twilio_message(to: str, body: str, from_number: Optional[str] = None):
     if not to_addr.startswith("whatsapp:"):
         to_addr = f"whatsapp:{to_addr}"
 
-    from_addr = (from_number or settings.TWILIO_WHATSAPP_FROM or settings.TWILIO_WHATSAPP_NUMBER).strip()
+    from_addr = (from_number or settings.TWILIO_WHATSAPP_FROM or settings.TWILIO_WHATSAPP_NUMBER or "whatsapp:+14155238886").strip()
     if not from_addr.startswith("whatsapp:"):
         from_addr = f"whatsapp:{from_addr}"
+
+    # If the user mistakenly set their own personal phone number as the Twilio sender number
+    if from_addr.lower() == to_addr.lower():
+        logger.warning(
+            f"[Twilio] Sender and recipient are identical ({from_addr}). "
+            "Falling back to Twilio Sandbox sender whatsapp:+14155238886."
+        )
+        from_addr = "whatsapp:+14155238886"
 
     try:
         from twilio.rest import Client
         client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
         msg = client.messages.create(body=body, from_=from_addr, to=to_addr)
         logger.info(f"Twilio message sent to {to_addr[:15]}... SID: {msg.sid}")
+        return msg.sid
     except Exception as e:
         logger.error(f"Twilio send error to {to_addr[:15]}...: {str(e)[:150]}")
+        raise e
 
 
 def send_whatsapp_message(to: str, text: str, from_number: Optional[str] = None):
@@ -203,9 +213,9 @@ async def process_message(phone_number: str, message_text: str, db: Session) -> 
     from app.modules.orchestrator.intent import classify_intent
     intent = classify_intent(text)
 
-    # If asking for private store data (sales, inventory, stock, forecast, health, alerts)
+    # If asking for private store data (sales, inventory, stock, forecast, health, alerts, inventory adjustments)
     # but the sender is NOT linked to an authorized user:
-    if not user and intent in ("sql", "inventory", "forecasting", "health", "alerts"):
+    if not user and intent in ("sql", "inventory", "forecasting", "health", "alerts", "inventory_adjustment"):
         onboarding = format_unlinked_onboarding(clean_phone)
         add_message(db, clean_phone, "assistant", onboarding)
         return split_long_message(onboarding)
@@ -214,7 +224,13 @@ async def process_message(phone_number: str, message_text: str, db: Session) -> 
     try:
         from app.modules.orchestrator.graph import app_graph
         session_id = get_session_id(clean_phone)
-        result = app_graph.invoke({"query": text, "session_id": session_id})
+        result = app_graph.invoke({
+            "query": text,
+            "session_id": session_id,
+            "store_id": 1,
+            "user_id": user.id if user else None,
+            "source": "whatsapp"
+        })
         
         # Extract response from orchestrator graph
         raw_response = result.get("final_response") or result.get("response") or "Kuch samajh nahi aaya. Dobara poochho."

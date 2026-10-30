@@ -5,36 +5,40 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Boxes,
-  MessageSquare,
-  BarChart2,
+  Terminal,
+  LineChart,
   FileText,
   Bell,
   Settings,
   Sparkles,
   Package,
   ArrowRight,
-  CornerDownLeft,
-  X
+  X,
+  Compass,
+  Upload
 } from 'lucide-react'
 import { posAPI } from '../services/api'
 
 const PAGES = [
-  { id: 'dash', title: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, category: 'Pages' },
-  { id: 'pos', title: 'Point of Sale (POS)', path: '/pos', icon: ShoppingCart, category: 'Pages' },
-  { id: 'inv', title: 'Inventory Management', path: '/inventory', icon: Boxes, category: 'Pages' },
-  { id: 'chat', title: 'AI Assistant Chat', path: '/chat', icon: MessageSquare, category: 'Pages' },
-  { id: 'analytics', title: 'Sales Analytics & ML', path: '/analytics', icon: BarChart2, category: 'Pages' },
-  { id: 'reports', title: 'Reports & Export', path: '/reports', icon: FileText, category: 'Pages' },
-  { id: 'alerts', title: 'Stock & System Alerts', path: '/alerts', icon: Bell, category: 'Pages' },
-  { id: 'settings', title: 'Store Settings', path: '/settings', icon: Settings, category: 'Pages' },
+  { id: 'story', title: 'The Story of Your Business (Start Screen)', path: '/story', icon: Sparkles, category: 'Pages' },
+  { id: 'dash', title: 'Executive Story Dashboard', path: '/dashboard', icon: LayoutDashboard, category: 'Pages' },
+  { id: 'pos', title: 'Point of Sale (POS Billing)', path: '/pos', icon: ShoppingCart, category: 'Pages' },
+  { id: 'inv', title: 'Inventory Health & Restock', path: '/inventory', icon: Boxes, category: 'Pages' },
+  { id: 'chat', title: 'AI Store Assistant (Consultant)', path: '/chat', icon: Terminal, category: 'Pages' },
+  { id: 'analytics', title: 'Sales Analytics & Forecasting', path: '/analytics', icon: LineChart, category: 'Pages' },
+  { id: 'market', title: 'Market Intelligence & Festivals', path: '/market', icon: Compass, category: 'Pages' },
+  { id: 'reports', title: 'Executive PDF Dossiers', path: '/reports', icon: FileText, category: 'Pages' },
+  { id: 'alerts', title: 'Actionable Alerts', path: '/alerts', icon: Bell, category: 'Pages' },
+  { id: 'settings', title: 'Store Settings & Team PINs', path: '/settings', icon: Settings, category: 'Pages' },
+  { id: 'upload', title: 'Data Ingestion (CSV / Excel)', path: '/upload', icon: Upload, category: 'Pages' },
 ]
 
 const AI_QUERIES = [
-  'Aaj ki sales summary',
-  'Critical stock products',
-  'Is hafte ka forecast',
-  'Business health score',
-  'Pending alerts',
+  'Aaj ki sales summary aur revenue batao',
+  'Critical stock products kaunse hain?',
+  'Agle 30 din ka sales forecast kya hai?',
+  'Business health score aur top issue batao',
+  'Pending action alerts check karo',
 ]
 
 export default function CommandPalette() {
@@ -89,7 +93,7 @@ export default function CommandPalette() {
       try {
         const res = await posAPI.searchProducts(query.trim())
         if (isMounted) {
-          setProducts(res.data.slice(0, 6)) // top 6 products
+          setProducts(res.data.slice(0, 5))
         }
       } catch (err) {
         console.error('CommandPalette product search error:', err)
@@ -104,97 +108,78 @@ export default function CommandPalette() {
     }
   }, [query])
 
-  // Filter Pages
+  // Filtered page actions
   const filteredPages = useMemo(() => {
     if (!query.trim()) return PAGES
     const q = query.toLowerCase()
     return PAGES.filter((p) => p.title.toLowerCase().includes(q))
   }, [query])
 
-  // Filter AI Queries
-  const filteredAiQueries = useMemo(() => {
+  // Filtered AI suggestions
+  const filteredAi = useMemo(() => {
     if (!query.trim()) return AI_QUERIES
     const q = query.toLowerCase()
     return AI_QUERIES.filter((item) => item.toLowerCase().includes(q))
   }, [query])
 
-  // Build unified items list for keyboard navigation
-  const allItems = useMemo(() => {
+  // Flattened items for keyboard navigation
+  const flatItems = useMemo(() => {
     const items = []
 
-    filteredPages.forEach((page) => {
-      items.push({
-        type: 'PAGE',
-        id: `page-${page.id}`,
-        title: page.title,
-        data: page,
-      })
-    })
-
-    filteredAiQueries.forEach((qText, idx) => {
-      items.push({
-        type: 'AI_QUERY',
-        id: `ai-${idx}`,
-        title: qText,
-        data: qText,
-      })
+    filteredPages.forEach((p) => {
+      items.push({ type: 'page', data: p })
     })
 
     products.forEach((prod) => {
-      items.push({
-        type: 'PRODUCT',
-        id: `prod-${prod.id}`,
-        title: prod.name,
-        data: prod,
-      })
+      items.push({ type: 'product', data: prod })
+    })
+
+    filteredAi.forEach((ai) => {
+      items.push({ type: 'ai', data: ai })
     })
 
     return items
-  }, [filteredPages, filteredAiQueries, products])
+  }, [filteredPages, products, filteredAi])
 
-  // Ensure selectedIndex is within range
   useEffect(() => {
-    if (selectedIndex >= allItems.length) {
-      setSelectedIndex(Math.max(0, allItems.length - 1))
-    }
-  }, [allItems.length, selectedIndex])
+    setSelectedIndex(0)
+  }, [query, flatItems.length])
 
-  // Scroll active item into view
   useEffect(() => {
-    if (listRef.current) {
-      const activeEl = listRef.current.querySelector('[data-active="true"]')
-      if (activeEl) {
-        activeEl.scrollIntoView({ block: 'nearest' })
-      }
+    if (!listRef.current) return
+    const activeEl = listRef.current.querySelector('[data-active="true"]')
+    if (activeEl) {
+      activeEl.scrollIntoView({ block: 'nearest' })
     }
   }, [selectedIndex])
 
-  const handleSelectItem = (item) => {
-    if (!item) return
+  const handleSelect = (item) => {
     setIsOpen(false)
+    if (!item) return
 
-    if (item.type === 'PAGE') {
+    if (item.type === 'page') {
       navigate(item.data.path)
-    } else if (item.type === 'AI_QUERY') {
+    } else if (item.type === 'product') {
+      navigate('/inventory', { state: { search: item.data.name } })
+    } else if (item.type === 'ai') {
       navigate('/chat', { state: { initialQuery: item.data } })
-    } else if (item.type === 'PRODUCT') {
-      // Navigate to POS or inventory with product highlighted
-      navigate('/inventory', { state: { searchProduct: item.data.name } })
     }
   }
 
-  // Handle keyboard events in input
   const handleInputKeyDown = (e) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      setSelectedIndex((prev) => (prev + 1 < allItems.length ? prev + 1 : 0))
+      setSelectedIndex((prev) => (prev + 1) % Math.max(1, flatItems.length))
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      setSelectedIndex((prev) => (prev - 1 >= 0 ? prev - 1 : allItems.length - 1))
+      setSelectedIndex((prev) => (prev - 1 + flatItems.length) % Math.max(1, flatItems.length))
     } else if (e.key === 'Enter') {
       e.preventDefault()
-      if (allItems[selectedIndex]) {
-        handleSelectItem(allItems[selectedIndex])
+      if (flatItems[selectedIndex]) {
+        handleSelect(flatItems[selectedIndex])
+      } else if (query.trim()) {
+        setIsOpen(false)
+        navigate('/chat', { state: { initialQuery: query.trim() } })
       }
     }
   }
@@ -203,196 +188,178 @@ export default function CommandPalette() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-20 px-4 bg-black/60 backdrop-blur-md transition-opacity"
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-start justify-center pt-16 sm:pt-24 p-4 animate-in fade-in duration-100"
       onClick={() => setIsOpen(false)}
     >
       <div
-        className="w-full max-w-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[75vh] animate-in fade-in zoom-in-95"
+        className="w-full max-w-xl bg-[var(--bg-surface)] border-2 border-[var(--border-strong)] rounded-none shadow-[6px_6px_0px_#111111] dark:shadow-[6px_6px_0px_#000000] overflow-hidden flex flex-col max-h-[75vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search Input Bar */}
-        <div className="flex items-center px-4 py-3.5 border-b border-[var(--border-color)] gap-3 bg-[var(--bg-surface)]">
-          <Search size={18} className="text-[var(--text-muted)] shrink-0" />
+        <div className="flex items-center gap-3 px-4 py-3.5 border-b-2 border-[var(--border-strong)] bg-[var(--bg-surface-elevated)]">
+          <Search size={16} className="text-[var(--text-main)] shrink-0" />
           <input
             ref={inputRef}
             type="text"
             value={query}
-            onChange={(e) => {
-              setQuery(e.target.value)
-              setSelectedIndex(0)
-            }}
+            onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleInputKeyDown}
-            placeholder="Type a command, ask AI, or search products..."
-            className="flex-1 bg-transparent border-none outline-none text-sm text-[var(--text-main)] placeholder-[var(--text-muted)] font-medium"
+            placeholder="Search pages, products, or ask AI a business question..."
+            className="w-full bg-transparent border-none text-[var(--text-main)] placeholder-[var(--text-dim)] text-xs sm:text-sm font-sans focus:outline-none"
           />
-          {query && (
+          {query ? (
             <button
-              onClick={() => {
-                setQuery('')
-                inputRef.current?.focus()
-              }}
-              className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded cursor-pointer"
+              onClick={() => setQuery('')}
+              className="p-1 rounded text-[var(--text-dim)] hover:text-[var(--text-main)] cursor-pointer"
             >
-              <X size={15} />
+              <X size={14} />
             </button>
+          ) : (
+            <kbd className="font-mono text-[10px] px-1.5 py-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--text-main)] font-bold">
+              ESC
+            </kbd>
           )}
-          <div className="flex items-center gap-1.5 shrink-0 text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] px-1.5 py-0.5 rounded">
-            <span>ESC</span>
-          </div>
         </div>
 
         {/* Results List */}
-        <div ref={listRef} className="flex-1 overflow-y-auto p-2 space-y-4">
-          {allItems.length === 0 && !isSearchingProducts && (
-            <div className="py-12 text-center text-xs text-[var(--text-muted)] font-mono">
-              No matching pages, queries, or products found.
-            </div>
-          )}
-
-          {/* Section: NAVIGATION */}
+        <div ref={listRef} className="overflow-y-auto p-2 divide-y divide-[var(--border-subtle)] text-xs">
+          {/* Pages */}
           {filteredPages.length > 0 && (
-            <div>
-              <div className="px-2 py-1 text-[10px] font-semibold tracking-wider uppercase text-[var(--text-muted)]">
-                Navigation
+            <div className="py-1">
+              <div className="px-3 py-1 text-[10px] font-mono uppercase tracking-wider text-[var(--text-dim)] font-bold">
+                [PAGES & WORKSPACES]
               </div>
-              <div className="space-y-0.5">
-                {filteredPages.map((page) => {
-                  const globalIdx = allItems.findIndex((it) => it.id === `page-${page.id}`)
-                  const isSelected = globalIdx === selectedIndex
-                  const Icon = page.icon
-                  return (
-                    <div
-                      key={page.id}
-                      data-active={isSelected}
-                      onMouseEnter={() => setSelectedIndex(globalIdx)}
-                      onClick={() => handleSelectItem(allItems[globalIdx])}
-                      className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer transition-colors ${
-                        isSelected
-                          ? 'bg-blue-600 text-white font-medium'
-                          : 'text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)]'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <Icon size={15} className={isSelected ? 'text-white' : 'text-[var(--text-muted)]'} />
-                        <span>{page.title}</span>
-                      </div>
-                      {isSelected && (
-                        <div className="flex items-center gap-1 text-[10px] opacity-80 font-mono">
-                          <span>Open</span>
-                          <CornerDownLeft size={11} />
-                        </div>
-                      )}
+              {filteredPages.map((page) => {
+                const itemIndex = flatItems.findIndex((it) => it.type === 'page' && it.data.id === page.id)
+                const isActive = itemIndex === selectedIndex
+                const Icon = page.icon
+                return (
+                  <button
+                    key={page.id}
+                    data-active={isActive}
+                    onClick={() => handleSelect({ type: 'page', data: page })}
+                    className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors cursor-pointer ${
+                      isActive
+                        ? 'bg-[var(--accent)] text-black font-bold border border-black shadow-[2px_2px_0px_#111111]'
+                        : 'text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Icon size={15} className={isActive ? 'text-black' : 'text-[var(--text-muted)]'} />
+                      <span className="font-semibold">{page.title}</span>
                     </div>
-                  )
-                })}
-              </div>
+                    <ArrowRight size={13} className={isActive ? 'text-black' : 'text-[var(--text-dim)]'} />
+                  </button>
+                )
+              })}
             </div>
           )}
 
-          {/* Section: AI QUICK QUERIES */}
-          {filteredAiQueries.length > 0 && (
-            <div>
-              <div className="px-2 py-1 text-[10px] font-semibold tracking-wider uppercase text-blue-500 flex items-center gap-1.5">
-                <Sparkles size={11} />
-                <span>AI Quick Queries</span>
-              </div>
-              <div className="space-y-0.5">
-                {filteredAiQueries.map((qText, idx) => {
-                  const globalIdx = allItems.findIndex((it) => it.id === `ai-${idx}`)
-                  const isSelected = globalIdx === selectedIndex
-                  return (
-                    <div
-                      key={`ai-${idx}`}
-                      data-active={isSelected}
-                      onMouseEnter={() => setSelectedIndex(globalIdx)}
-                      onClick={() => handleSelectItem(allItems[globalIdx])}
-                      className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer transition-colors ${
-                        isSelected
-                          ? 'bg-blue-600 text-white font-medium'
-                          : 'text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)]'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <Sparkles size={14} className={isSelected ? 'text-white' : 'text-blue-500'} />
-                        <span>"{qText}"</span>
-                      </div>
-                      {isSelected ? (
-                        <div className="flex items-center gap-1 text-[10px] opacity-80 font-mono">
-                          <span>Run Query</span>
-                          <CornerDownLeft size={11} />
-                        </div>
-                      ) : (
-                        <span className="text-[10px] text-[var(--text-muted)] font-mono">Ask AI</span>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Section: PRODUCTS */}
+          {/* Products */}
           {products.length > 0 && (
-            <div>
-              <div className="px-2 py-1 text-[10px] font-semibold tracking-wider uppercase text-emerald-500 flex items-center gap-1.5">
-                <Package size={11} />
-                <span>Products ({products.length})</span>
+            <div className="py-1">
+              <div className="px-3 py-1 text-[10px] font-mono uppercase tracking-wider text-[var(--text-dim)] font-bold flex items-center justify-between">
+                <span>[INVENTORY PRODUCTS]</span>
+                {isSearchingProducts && <span className="animate-pulse">Searching...</span>}
               </div>
-              <div className="space-y-0.5">
-                {products.map((prod) => {
-                  const globalIdx = allItems.findIndex((it) => it.id === `prod-${prod.id}`)
-                  const isSelected = globalIdx === selectedIndex
-                  return (
-                    <div
-                      key={`prod-${prod.id}`}
-                      data-active={isSelected}
-                      onMouseEnter={() => setSelectedIndex(globalIdx)}
-                      onClick={() => handleSelectItem(allItems[globalIdx])}
-                      className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer transition-colors ${
-                        isSelected
-                          ? 'bg-blue-600 text-white font-medium'
-                          : 'text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)]'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 truncate">
-                        <Package size={14} className={isSelected ? 'text-white' : 'text-emerald-500 shrink-0'} />
-                        <span className="truncate">{prod.name}</span>
-                        <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${isSelected ? 'bg-white/20 text-white' : 'bg-[var(--bg-surface-elevated)] text-[var(--text-muted)]'}`}>
-                          {prod.sku}
+              {products.map((prod) => {
+                const itemIndex = flatItems.findIndex((it) => it.type === 'product' && it.data.id === prod.id)
+                const isActive = itemIndex === selectedIndex
+                return (
+                  <button
+                    key={prod.id}
+                    data-active={isActive}
+                    onClick={() => handleSelect({ type: 'product', data: prod })}
+                    className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors cursor-pointer ${
+                      isActive
+                        ? 'bg-[var(--accent)] text-black font-bold border border-black shadow-[2px_2px_0px_#111111]'
+                        : 'text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Package size={15} className={isActive ? 'text-black' : 'text-[var(--text-muted)]'} />
+                      <div>
+                        <span className="font-bold">{prod.name}</span>
+                        <span className={`ml-2 text-[10px] font-mono ${isActive ? 'text-black' : 'text-[var(--text-dim)]'}`}>
+                          Stock: {prod.current_stock} {prod.unit}
                         </span>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span className="font-mono font-semibold">₹{prod.unit_price}</span>
-                        <span className={`text-[10px] font-mono ${prod.current_stock <= prod.reorder_point ? 'text-amber-400 font-bold' : isSelected ? 'text-white/80' : 'text-[var(--text-muted)]'}`}>
-                          Stock: {prod.current_stock}
-                        </span>
-                        {isSelected && <ArrowRight size={12} className="opacity-80" />}
                       </div>
                     </div>
-                  )
-                })}
+                    <span className="font-mono text-[11px] font-bold">₹{prod.unit_price}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {/* AI Prompts */}
+          {filteredAi.length > 0 && (
+            <div className="py-1">
+              <div className="px-3 py-1 text-[10px] font-mono uppercase tracking-wider text-[var(--text-dim)] font-bold flex items-center gap-1">
+                <span>[ASK STORE ASSISTANT]</span>
+              </div>
+              {filteredAi.map((aiText, idx) => {
+                const itemIndex = flatItems.findIndex((it) => it.type === 'ai' && it.data === aiText)
+                const isActive = itemIndex === selectedIndex
+                return (
+                  <button
+                    key={idx}
+                    data-active={isActive}
+                    onClick={() => handleSelect({ type: 'ai', data: aiText })}
+                    className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors cursor-pointer ${
+                      isActive
+                        ? 'bg-[var(--accent)] text-black font-bold border border-black shadow-[2px_2px_0px_#111111]'
+                        : 'text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Sparkles size={14} className={isActive ? 'text-black' : 'text-[var(--text-dim)]'} />
+                      <span className="font-semibold truncate">{aiText}</span>
+                    </div>
+                    <span className={`text-[10px] font-mono uppercase font-bold shrink-0 ${isActive ? 'text-black' : 'text-[var(--text-dim)]'}`}>
+                      ASK
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {flatItems.length === 0 && (
+            <div className="py-8 text-center text-[var(--text-dim)] font-mono text-xs">
+              No matching pages or items found for &quot;{query}&quot;.
+              <div className="mt-3">
+                <button
+                  onClick={() => {
+                    setIsOpen(false)
+                    navigate('/chat', { state: { initialQuery: query.trim() } })
+                  }}
+                  className="btn-accent text-xs py-1.5 px-3"
+                >
+                  <Sparkles size={13} /> Ask AI Assistant &quot;{query}&quot;
+                </button>
               </div>
             </div>
           )}
         </div>
 
-        {/* Footer shortcuts helper */}
-        <div className="px-4 py-2 bg-[var(--bg-surface-elevated)] border-t border-[var(--border-color)] flex items-center justify-between text-[11px] text-[var(--text-muted)] font-mono">
+        {/* Footer shortcuts */}
+        <div className="px-4 py-2.5 bg-[var(--bg-surface-elevated)] border-t border-[var(--border-color)] flex items-center justify-between text-[11px] text-[var(--text-dim)] font-mono">
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1">
-              <kbd className="bg-[var(--bg-surface)] border border-[var(--border-color)] px-1 rounded text-[10px]">↑</kbd>
-              <kbd className="bg-[var(--bg-surface)] border border-[var(--border-color)] px-1 rounded text-[10px]">↓</kbd>
+              <kbd className="px-1 py-0.2 bg-[var(--bg-surface)] border border-[var(--border-color)] text-[10px] font-bold">
+                ↑↓
+              </kbd>
               Navigate
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="bg-[var(--bg-surface)] border border-[var(--border-color)] px-1.5 rounded text-[10px]">↵</kbd>
+              <kbd className="px-1 py-0.2 bg-[var(--bg-surface)] border border-[var(--border-color)] text-[10px] font-bold">
+                ↵
+              </kbd>
               Select
             </span>
           </div>
-          <div className="flex items-center gap-1">
-            <kbd className="bg-[var(--bg-surface)] border border-[var(--border-color)] px-1.5 rounded text-[10px]">Esc</kbd>
-            Close
-          </div>
+          <span>[BusinessGPT OS]</span>
         </div>
       </div>
     </div>

@@ -27,6 +27,7 @@ class UserOut(BaseModel):
     id: int
     name: str
     role: str
+    store_id: Optional[int] = 1
     created_at: Optional[datetime] = None
 
     class Config:
@@ -43,6 +44,7 @@ class UserCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
     role: str = Field(..., description="EMPLOYEE, MANAGER, or OWNER")
     pin: str = Field(..., min_length=4, max_length=6)
+    store_id: Optional[int] = 1
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -81,7 +83,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         "sub": str(user.id),
         "user_id": user.id,
         "name": user.name,
-        "role": user.role
+        "role": user.role,
+        "store_id": getattr(user, "store_id", 1) or 1
     })
 
     return LoginResponse(
@@ -110,7 +113,7 @@ def get_available_roles(db: Session = Depends(get_db)):
         {"role": "OWNER", "label": "Owner (Full Access)", "description": "AI BusinessGPT, deep analytics, forecasting, settings"}
     ]
     user_list = [
-        {"id": u.id, "name": u.name, "role": u.role}
+        {"id": u.id, "name": u.name, "role": u.role, "store_id": getattr(u, "store_id", 1) or 1}
         for u in users
     ]
     return {
@@ -125,7 +128,8 @@ def list_users(
     current_user: User = Depends(require_role(["OWNER", "MANAGER"]))
 ):
     """List all store team members (Managers and Owners only)."""
-    users = db.query(User).order_by(User.role.desc(), User.id.asc()).all()
+    store_id = getattr(current_user, "store_id", 1) or 1
+    users = db.query(User).filter(User.store_id == store_id).order_by(User.role.desc(), User.id.asc()).all()
     return [UserOut.from_orm(u) for u in users]
 
 
@@ -140,11 +144,13 @@ def create_user(
     if role_clean not in ["EMPLOYEE", "MANAGER", "OWNER"]:
         raise HTTPException(status_code=400, detail="Invalid role. Must be EMPLOYEE, MANAGER, or OWNER.")
 
+    store_id = getattr(current_user, "store_id", 1) or 1
     hashed = hash_pin(payload.pin)
     new_user = User(
         name=payload.name.strip(),
         role=role_clean,
-        pin=hashed
+        pin=hashed,
+        store_id=store_id
     )
     db.add(new_user)
     db.commit()
@@ -162,7 +168,8 @@ def delete_user(
     if current_user.id == user_id:
         raise HTTPException(status_code=400, detail="Cannot delete your own active owner account.")
 
-    target = db.query(User).filter(User.id == user_id).first()
+    store_id = getattr(current_user, "store_id", 1) or 1
+    target = db.query(User).filter(User.id == user_id, User.store_id == store_id).first()
     if not target:
         raise HTTPException(status_code=404, detail="User not found.")
 

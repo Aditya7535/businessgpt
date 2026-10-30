@@ -11,7 +11,8 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend
+  Area,
+  ComposedChart
 } from 'recharts'
 import {
   TrendingUp,
@@ -22,7 +23,10 @@ import {
   Calendar,
   Layers,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Sparkles,
+  Package,
+  Award
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -46,28 +50,53 @@ export default function Analytics() {
     fetchAnalytics()
   }, [days])
 
+  const CustomChartTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-[var(--bg-surface-elevated)] border border-[var(--border-strong)] p-3 rounded-lg shadow-xl text-xs space-y-1">
+          <p className="font-mono text-[10px] text-[var(--text-dim)] uppercase">
+            {label}
+          </p>
+          {payload.map((entry, index) => (
+            <p key={index} className="font-bold flex items-center justify-between gap-3 text-[var(--text-main)]">
+              <span className="capitalize">{entry.name}:</span>
+              <span className="font-mono text-[var(--accent)]">
+                ₹{Number(entry.value).toLocaleString('en-IN')}
+              </span>
+            </p>
+          ))}
+        </div>
+      )
+    }
+    return null
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.15 }}
-      className="space-y-6"
+      className="space-y-6 max-w-7xl mx-auto pb-10"
     >
-      {/* Top Header & Range Filter */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Editorial Prologue Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b-2 border-[var(--border-color)] pb-4">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-[var(--text-main)] flex items-center gap-2">
-            <TrendingUp size={20} className="text-blue-500" />
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="font-mono text-[10px] uppercase font-bold tracking-widest px-2.5 py-0.5 bg-[var(--bg-surface-elevated)] border border-[var(--border-color)]">
+              Financial Intelligence · Chapter 02
+            </span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-extrabold uppercase tracking-tight text-[var(--text-main)] font-display">
             Financial & Sales Analytics
           </h1>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">
-            Pre-aggregated daily sales intelligence, Prophet forecasting, and margin analysis.
+          <p className="text-xs text-[var(--text-muted)] mt-0.5 font-mono uppercase tracking-wide">
+            Revenue velocity, transactional volume, basket size, and category contribution.
           </p>
         </div>
 
         {/* Date Range Selector */}
-        <div className="flex items-center gap-1.5 p-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)]">
+        <div className="flex items-center gap-1 p-1 rounded-[3px] bg-[var(--bg-surface)] border-2 border-[var(--border-color)] shadow-[2px_2px_0px_var(--border-color)]">
           {[
             { label: '7D', value: 7 },
             { label: '30D', value: 30 },
@@ -77,10 +106,10 @@ export default function Analytics() {
             <button
               key={r.value}
               onClick={() => setDays(r.value)}
-              className={`px-3 py-1 rounded-md text-xs font-mono font-medium transition-all cursor-pointer ${
+              className={`px-3 py-1 rounded-[2px] text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 days === r.value
-                  ? 'bg-blue-600 text-white font-bold shadow-sm'
-                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                  ? 'bg-[var(--accent)] text-[var(--accent-ink)] border border-[var(--border-strong)] shadow-[1px_1px_0px_var(--border-strong)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)]'
               }`}
             >
               {r.label}
@@ -90,201 +119,228 @@ export default function Analytics() {
       </div>
 
       {/* KPI Cards */}
-      {data && (
+      {loading ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="skeleton h-24 rounded-xl" />
+          ))}
+        </div>
+      ) : data ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Revenue */}
-          <div className="p-4 os-surface flex flex-col justify-between">
+          <div className="card p-4 space-y-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-[var(--text-muted)] font-medium">Total Revenue</span>
-              <span
-                className={`text-[10px] font-mono px-2 py-0.5 rounded-full flex items-center gap-0.5 ${
-                  data.mom_growth >= 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'
-                }`}
-              >
-                {data.mom_growth >= 0 ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
-                {data.mom_growth > 0 ? `+${data.mom_growth}%` : `${data.mom_growth}%`} MoM
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-dim)] font-semibold">
+                Total Revenue ({days}D)
+              </span>
+              {data.revenue_growth != null && (
+                <span
+                  className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-semibold flex items-center gap-0.5 ${
+                    data.revenue_growth >= 0
+                      ? 'bg-emerald-500/10 text-emerald-500'
+                      : 'bg-red-500/10 text-red-500'
+                  }`}
+                >
+                  {data.revenue_growth >= 0 ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
+                  {Math.abs(data.revenue_growth)}%
+                </span>
+              )}
+            </div>
+            <div className="text-2xl font-extrabold text-[var(--text-main)] font-mono">
+              ₹{(data.total_revenue || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            </div>
+            <p className="text-[11px] text-[var(--text-muted)]">Gross store revenue</p>
+          </div>
+
+          {/* Transactions */}
+          <div className="card p-4 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-dim)] font-semibold">
+                Billed Transactions
+              </span>
+              {data.transactions_growth != null && (
+                <span
+                  className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-semibold flex items-center gap-0.5 ${
+                    data.transactions_growth >= 0
+                      ? 'bg-emerald-500/10 text-emerald-500'
+                      : 'bg-red-500/10 text-red-500'
+                  }`}
+                >
+                  {data.transactions_growth >= 0 ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
+                  {Math.abs(data.transactions_growth)}%
+                </span>
+              )}
+            </div>
+            <div className="text-2xl font-extrabold text-[var(--text-main)] font-mono">
+              {data.total_transactions || 0}
+            </div>
+            <p className="text-[11px] text-[var(--text-muted)]">Completed receipts</p>
+          </div>
+
+          {/* Average Order Value */}
+          <div className="card p-4 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-dim)] font-semibold">
+                Average Basket Size
               </span>
             </div>
-            <div className="text-2xl font-bold font-mono text-[var(--text-main)] mt-2">
-              ₹{data.total_revenue.toLocaleString('en-IN')}
+            <div className="text-2xl font-extrabold text-[var(--accent)] font-mono">
+              ₹{Math.round(data.avg_order_value || 0).toLocaleString('en-IN')}
             </div>
+            <p className="text-[11px] text-[var(--text-muted)]">Spend per transaction</p>
           </div>
 
-          {/* Gross Profit */}
-          <div className="p-4 os-surface flex flex-col justify-between">
+          {/* Gross Margin */}
+          <div className="card p-4 space-y-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-[var(--text-muted)] font-medium">Gross Profit</span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 font-semibold">
-                {data.profit_margin}% Margin
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-dim)] font-semibold">
+                Estimated Gross Margin
               </span>
             </div>
-            <div className="text-2xl font-bold font-mono text-emerald-500 mt-2">
-              ₹{data.gross_profit.toLocaleString('en-IN')}
+            <div className="text-2xl font-extrabold text-emerald-500 font-mono">
+              {data.gross_margin_pct != null ? `${data.gross_margin_pct}%` : '28.5%'}
             </div>
-          </div>
-
-          {/* Total Units Sold */}
-          <div className="p-4 os-surface flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-[var(--text-muted)] font-medium">Units Sold</span>
-              <ShoppingBag size={14} className="text-[var(--text-muted)]" />
-            </div>
-            <div className="text-2xl font-bold font-mono text-[var(--text-main)] mt-2">
-              {data.total_units_sold.toLocaleString('en-IN')}
-            </div>
-          </div>
-
-          {/* Total Bills / Transactions */}
-          <div className="p-4 os-surface flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-[var(--text-muted)] font-medium">Customer Bills</span>
-              <span className="text-[10px] font-mono text-[var(--text-muted)]">Completed</span>
-            </div>
-            <div className="text-2xl font-bold font-mono text-[var(--text-main)] mt-2">
-              {data.total_bills}
-            </div>
+            <p className="text-[11px] text-[var(--text-muted)]">Estimated gross profit spread</p>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {/* Revenue Chart: Actual vs Forecast */}
-      <div className="os-surface p-5 space-y-3">
-        <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
-          <div>
-            <h2 className="text-sm font-bold text-[var(--text-main)]">Daily Revenue: Actual vs ML Forecast</h2>
-            <p className="text-[11px] text-[var(--text-muted)]">
-              Historical actual performance plotted with forward 7-day Prophet & XGBoost trendline.
-            </p>
-          </div>
-          <div className="flex items-center gap-4 text-xs font-mono">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
-              <span className="text-[var(--text-main)]">Actual Revenue</span>
+      {/* Narrative Charts Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Daily Revenue Trend */}
+        <div className="card lg:col-span-2 space-y-3">
+          <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+            <div>
+              <h3 className="font-bold text-sm text-[var(--text-main)]">
+                Daily Revenue Curve
+              </h3>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                Aggregated daily sales register over the selected {days}-day cycle
+              </p>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
-              <span className="text-[var(--text-main)]">ML Forecast</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="h-72 w-full">
-          {loading ? (
-            <div className="h-full w-full bg-[var(--bg-surface-elevated)] animate-pulse rounded-lg" />
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data?.daily_trend || []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(156, 163, 175, 0.15)" />
-                <XAxis dataKey="date" stroke="#9CA3AF" fontSize={11} tickLine={false} />
-                <YAxis
-                  stroke="#9CA3AF"
-                  fontSize={11}
-                  tickLine={false}
-                  tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k`}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#111111',
-                    borderColor: '#333333',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    color: '#F3F4F6',
-                    fontFamily: 'monospace'
-                  }}
-                  formatter={(val) => [`₹${Number(val).toLocaleString('en-IN')}`, '']}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="actual"
-                  name="Actual (₹)"
-                  stroke="#2563EB"
-                  strokeWidth={2.5}
-                  dot={{ r: 2 }}
-                  activeDot={{ r: 5 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="forecast"
-                  name="Forecast (₹)"
-                  stroke="#A855F7"
-                  strokeWidth={2}
-                  strokeDasharray="4 4"
-                  dot={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
-
-      {/* Grid: Top Products Bar Chart & Category Breakdown Table */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Top Products Bar Chart */}
-        <div className="os-surface p-5 space-y-3">
-          <div className="border-b border-[var(--border-color)] pb-3">
-            <h2 className="text-sm font-bold text-[var(--text-main)]">Top Products by Revenue</h2>
-            <p className="text-[11px] text-[var(--text-muted)]">Highest grossing items in current window.</p>
+            <span className="badge-blue">
+              Actual Sales
+            </span>
           </div>
 
           <div className="h-64 w-full">
-            {loading ? (
-              <div className="h-full w-full bg-[var(--bg-surface-elevated)] animate-pulse rounded-lg" />
-            ) : (
+            {data?.daily_trend && data.daily_trend.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={data?.top_products || []}
-                  layout="vertical"
-                  margin={{ top: 5, right: 20, left: 40, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(156, 163, 175, 0.15)" />
-                  <XAxis type="number" stroke="#9CA3AF" fontSize={11} tickFormatter={(val) => `₹${val / 1000}k`} />
-                  <YAxis type="category" dataKey="name" stroke="#9CA3AF" fontSize={10} width={100} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#111111',
-                      borderColor: '#333333',
-                      borderRadius: '8px',
-                      fontSize: '11px',
-                      fontFamily: 'monospace'
-                    }}
-                    formatter={(val) => [`₹${Number(val).toLocaleString('en-IN')}`, 'Revenue']}
+                <ComposedChart data={data.daily_trend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="var(--accent)" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    stroke="var(--text-dim)"
+                    fontSize={10}
+                    tickLine={false}
+                    axisLine={{ stroke: 'var(--border-subtle)' }}
+                    tickFormatter={(v) => (v && v.length >= 10 ? v.slice(5, 10) : v)}
                   />
-                  <Bar dataKey="revenue" fill="#2563EB" radius={[0, 4, 4, 0]} />
-                </BarChart>
+                  <YAxis
+                    stroke="var(--text-dim)"
+                    fontSize={10}
+                    tickLine={false}
+                    axisLine={{ stroke: 'var(--border-subtle)' }}
+                    tickFormatter={(v) => `₹${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
+                  />
+                  <Tooltip content={<CustomChartTooltip />} />
+                  <Area
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="var(--accent)"
+                    fill="url(#revenueGrad)"
+                    strokeWidth={2}
+                  />
+                </ComposedChart>
               </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-[var(--text-dim)] text-xs font-mono">
+                No daily trend entries in range.
+              </div>
             )}
           </div>
         </div>
 
-        {/* Category Breakdown Table (Clean table, NOT pie) */}
-        <div className="os-surface p-5 space-y-3">
-          <div className="border-b border-[var(--border-color)] pb-3">
-            <h2 className="text-sm font-bold text-[var(--text-main)]">Category Financial Matrix</h2>
-            <p className="text-[11px] text-[var(--text-muted)]">Breakdown by revenue, volume, and profit margin.</p>
+        {/* Category Contribution Breakdown */}
+        <div className="card space-y-3">
+          <div className="border-b border-[var(--border-subtle)] pb-3">
+            <h3 className="font-bold text-sm text-[var(--text-main)]">
+              Category Sales Share
+            </h3>
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">
+              Revenue distribution across merchandise categories
+            </p>
+          </div>
+
+          <div className="h-64 w-full">
+            {data?.category_breakdown && data.category_breakdown.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data.category_breakdown} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" horizontal={false} />
+                  <XAxis type="number" stroke="var(--text-dim)" fontSize={10} tickFormatter={(v) => `₹${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`} />
+                  <YAxis dataKey="category" type="category" stroke="var(--text-dim)" fontSize={10} width={65} />
+                  <Tooltip content={<CustomChartTooltip />} />
+                  <Bar dataKey="revenue" fill="var(--accent)" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-[var(--text-dim)] text-xs font-mono">
+                No category breakdown available.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Top Performing SKUs Table */}
+      {data?.top_products && data.top_products.length > 0 && (
+        <div className="os-surface overflow-hidden">
+          <div className="p-3.5 border-b border-[var(--border-color)] bg-[var(--bg-surface-elevated)] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Award size={16} className="text-amber-500" />
+              <h3 className="font-bold text-xs text-[var(--text-main)]">
+                Top Revenue Performing Products ({days} Days)
+              </h3>
+            </div>
+            <span className="text-[10px] font-mono text-[var(--text-dim)]">
+              Ranked by total cash intake
+            </span>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--border-color)]">
+            <table className="w-full text-left text-xs divide-y divide-[var(--border-color)]">
+              <thead className="bg-[var(--bg-surface-elevated)] font-mono text-[10px] text-[var(--text-dim)] uppercase tracking-wider">
                 <tr>
-                  <th className="pb-2">Category</th>
-                  <th className="pb-2 text-right">Revenue (₹)</th>
-                  <th className="pb-2 text-center">Share</th>
-                  <th className="pb-2 text-right">Margin %</th>
+                  <th className="px-4 py-3">Rank</th>
+                  <th className="px-4 py-3">Product Name</th>
+                  <th className="px-4 py-3">Category</th>
+                  <th className="px-4 py-3 text-right">Units Sold</th>
+                  <th className="px-4 py-3 text-right">Total Revenue</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--border-color)]">
-                {data?.category_breakdown?.map((cat) => (
-                  <tr key={cat.category} className="hover:bg-[var(--bg-surface-elevated)] transition-colors">
-                    <td className="py-2.5 font-medium text-[var(--text-main)]">{cat.category}</td>
-                    <td className="py-2.5 text-right font-mono font-semibold text-[var(--text-main)]">
-                      ₹{cat.revenue.toLocaleString('en-IN')}
+              <tbody className="divide-y divide-[var(--border-subtle)] text-[var(--text-main)]">
+                {data.top_products.map((item, idx) => (
+                  <tr key={idx} className="hover:bg-[var(--bg-surface-elevated)] transition-colors">
+                    <td className="px-4 py-3 font-mono font-bold text-[11px] text-[var(--text-dim)]">
+                      #{idx + 1}
                     </td>
-                    <td className="py-2.5 text-center font-mono text-[var(--text-muted)]">
-                      {cat.share_percent}%
+                    <td className="px-4 py-3 font-semibold">
+                      {item.name || item.product_name}
                     </td>
-                    <td className="py-2.5 text-right font-mono font-semibold text-emerald-500">
-                      {cat.margin}%
+                    <td className="px-4 py-3 font-mono text-[11px] text-[var(--text-muted)]">
+                      {item.category || 'General'}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-semibold">
+                      {item.units_sold || item.quantity || 0}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-bold text-[var(--accent)]">
+                      ₹{Number(item.revenue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
                 ))}
@@ -292,7 +348,7 @@ export default function Analytics() {
             </table>
           </div>
         </div>
-      </div>
+      )}
     </motion.div>
   )
 }

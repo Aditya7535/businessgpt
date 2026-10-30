@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { chatAPI, voiceAPI } from '../services/api'
 import {
   Terminal,
@@ -10,7 +10,6 @@ import {
   Boxes,
   Sparkles,
   RotateCcw,
-  Zap,
   Plus,
   Trash2,
   MessageSquare,
@@ -23,7 +22,12 @@ import {
   Loader2,
   X,
   Globe,
-  Settings2
+  Settings2,
+  CheckCircle2,
+  Bot,
+  User as UserIcon,
+  HelpCircle,
+  FileCheck2
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import ReactMarkdown from 'react-markdown'
@@ -33,7 +37,7 @@ const INITIAL_GREETING = {
   id: 'init-1',
   role: 'assistant',
   module: 'SQL',
-  text: 'Namaste! Main hoon BusinessGPT — aapka automated store intelligence terminal. PostgreSQL database real-time connect ho chuka hai. Aap direct numbers, forecasting, inventory alerts, ya SQL queries pooch sakte hain.',
+  text: 'Namaste! Main hoon BusinessGPT — aapka store intelligence assistant. Aapki dukan ke sales, stock, aur forecast records live connect hain. Aap sales summary, revenue, low stock, ya agle mahine ke forecast ke bare mein direct Hindi ya English mein pooch sakte hain.',
   timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
 }
 
@@ -46,6 +50,7 @@ export default function Chat() {
     return localStorage.getItem('businessgpt_active_chat_session') || 'session_default'
   })
   const [sessions, setSessions] = useState([])
+  const [showSessionsSidebar, setShowSessionsSidebar] = useState(false)
   const [activeTab, setActiveTab] = useState('history') // 'history' | 'prompts'
   const [historyLoading, setHistoryLoading] = useState(false)
 
@@ -80,11 +85,11 @@ export default function Chat() {
   const isCancelledRef = useRef(false)
 
   const suggestedCommands = [
-    { label: 'Aaj ki sales summary do', query: 'Aaj ki sales summary aur total revenue batao' },
+    { label: 'Aaj ki sales summary aur revenue batao', query: 'Aaj ki sales summary aur total revenue batao' },
     { label: 'Kaunsa product slow chal raha hai?', query: 'Kaunsa product slow chal raha hai pichle 30 din mein?' },
     { label: 'Top 3 products by revenue', query: 'Top 3 products by revenue batao' },
     { label: 'Agle mahine ka forecast', query: 'Agle mahine ka sales forecast kya hai?' },
-    { label: 'Low stock alert hai kya?', query: 'Kaunse products ka stock reorder point se kam hai?' },
+    { label: 'Low stock reorder alert hai kya?', query: 'Kaunse products ka stock reorder point se kam hai?' },
   ]
 
   // Persist current session ID
@@ -129,7 +134,7 @@ export default function Chat() {
         setMessages([INITIAL_GREETING])
       }
     } catch (err) {
-      console.warn('Could not fetch server chat history, using local cache:', err)
+      console.warn('Using local conversation cache:', err)
     } finally {
       setHistoryLoading(false)
     }
@@ -141,7 +146,7 @@ export default function Chat() {
     loadSessions()
   }, [sessionId])
 
-  // Handle incoming initialQuery from other pages (e.g. Dashboard shortcuts)
+  // Handle incoming initialQuery from other pages
   useEffect(() => {
     if (location.state?.initialQuery) {
       const q = location.state.initialQuery
@@ -189,7 +194,6 @@ export default function Chat() {
       }
 
       recorder.onstop = async () => {
-        // Release microphone device hardware
         stream.getTracks().forEach((track) => track.stop())
         if (recordingTimerRef.current) {
           clearInterval(recordingTimerRef.current)
@@ -199,116 +203,134 @@ export default function Chat() {
           return
         }
 
-        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' })
-        if (audioBlob.size < 400) {
-          toast.error('Voice recording was too brief. Please speak your question.')
+        const audioBlob = new Blob(audioChunksRef.current, {
+          type: mimeType || 'audio/webm',
+        })
+
+        if (audioBlob.size < 500) {
+          toast.error('Audio recording too brief. Please speak into the mic.')
           return
         }
 
-        setTranscribing(true)
-        const toastId = toast.loading('Transcribing voice with Groq Whisper...', { id: 'voice-transcribe' })
-
         try {
-          const res = await voiceAPI.transcribeAudio(audioBlob, voiceLanguage)
-          const text = (res.data?.text || '').trim()
-          if (text) {
-            if (autoSendVoice) {
-              toast.success('Voice transcribed! Executing query...', { id: toastId })
-              handleSend(text)
-            } else {
-              setInputMessage((prev) => (prev ? `${prev} ${text}` : text))
-              toast.success('Voice transcribed! Review and edit before sending.', { id: toastId })
-            }
+          setTranscribing(true)
+          toast.loading('Processing voice recording...', { id: 'voice-transcribe' })
+
+          const res = await voiceAPI.transcribeAudio(
+            audioBlob,
+            voiceLanguage === 'auto' ? null : voiceLanguage
+          )
+          const transcribedText = res.data?.text?.trim()
+
+          if (!transcribedText) {
+            toast.error('We couldn\'t hear any speech. Please try again.', { id: 'voice-transcribe' })
+            return
+          }
+
+          toast.success(`Heard: "${transcribedText.slice(0, 45)}..."`, { id: 'voice-transcribe' })
+
+          if (autoSendVoice) {
+            handleSend(transcribedText)
           } else {
-            toast.error('No speech detected in audio. Please speak louder and retry.', { id: toastId })
+            setInputMessage((prev) => (prev ? `${prev} ${transcribedText}` : transcribedText))
           }
         } catch (err) {
-          console.error('Voice transcription error:', err)
-          const detail = err.response?.data?.detail || err.message || 'Voice transcription failed.'
-          toast.error(detail, { id: toastId })
+          console.error('Transcription error:', err)
+          toast.error('We couldn\'t understand that recording. Please speak clearly or type your message.', { id: 'voice-transcribe' })
         } finally {
           setTranscribing(false)
         }
       }
 
-      mediaRecorderRef.current = recorder
       recorder.start(250)
+      mediaRecorderRef.current = recorder
       setIsRecording(true)
       setRecordingSeconds(0)
 
       recordingTimerRef.current = setInterval(() => {
-        setRecordingSeconds((prev) => prev + 1)
+        setRecordingSeconds((prev) => {
+          if (prev >= 60) {
+            stopRecording()
+            return 60
+          }
+          return prev + 1
+        })
       }, 1000)
     } catch (err) {
       console.error('Microphone permission error:', err)
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        toast.error('Microphone permission denied. Please allow audio access in your browser.')
+      if (err.name === 'NotAllowedError') {
+        toast.error('Microphone permission denied. Please allow microphone access in your browser settings.')
       } else {
-        toast.error('Failed to access microphone or hardware device error.')
+        toast.error('Could not access your microphone. Please check browser permissions.')
       }
     }
   }
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      isCancelledRef.current = false
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop()
-      setIsRecording(false)
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current)
-      }
     }
+    setIsRecording(false)
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current)
   }
 
   const cancelRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      isCancelledRef.current = true
-      audioChunksRef.current = []
+    isCancelledRef.current = true
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop()
-      setIsRecording(false)
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current)
-      }
-      toast('Voice recording discarded', { icon: '🗑️' })
     }
+    setIsRecording(false)
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current)
+    toast('Recording cancelled', { icon: '🚫' })
   }
 
-  // Start a new chat session
-  const handleNewChat = () => {
-    const newSessionId = `session_${Date.now()}`
-    setSessionId(newSessionId)
+  const handleVoiceLanguageChange = (lang) => {
+    setVoiceLanguage(lang)
+    localStorage.setItem('businessgpt_voice_lang', lang)
+  }
+
+  const handleAutoSendToggle = () => {
+    const nextVal = !autoSendVoice
+    setAutoSendVoice(nextVal)
+    localStorage.setItem('businessgpt_voice_autosend', String(nextVal))
+  }
+
+  // ── Session Operations ──
+  const handleNewSession = () => {
+    const newId = `session_${Date.now()}`
+    setSessionId(newId)
     setMessages([INITIAL_GREETING])
-    toast.success('New chat session started!')
+    setShowSessionsSidebar(false)
+    toast.success('Started a fresh conversation.')
   }
 
-  // Switch to an existing session
-  const handleSelectSession = (sId) => {
-    if (sId === sessionId) return
+  const handleSwitchSession = (sId) => {
     setSessionId(sId)
+    setShowSessionsSidebar(false)
   }
 
-  // Clear current chat history
-  const handleClearHistory = async () => {
-    if (!window.confirm('Are you sure you want to clear this conversation?')) return
+  const handleClearCurrentSession = async () => {
+    if (!window.confirm('Clear conversation history for this conversation?')) return
     try {
       await chatAPI.clearHistory(sessionId)
       localStorage.removeItem(`businessgpt_chat_cache_${sessionId}`)
       setMessages([INITIAL_GREETING])
-      await loadSessions()
-      toast.success('Chat history cleared.')
+      toast.success('Conversation cleared.')
+      loadSessions()
     } catch (err) {
-      toast.error('Failed to clear chat history on server.')
+      toast.error('Failed to clear conversation history.')
     }
   }
 
-  const handleSend = async (queryText = inputMessage) => {
-    const textToSend = queryText.trim()
-    if (!textToSend || loading) return
+  // ── Send Message ──
+  const handleSend = async (messageToSend = inputMessage) => {
+    const text = (typeof messageToSend === 'string' ? messageToSend : inputMessage).trim()
+    if (!text || loading) return
 
     const userMsg = {
-      id: Date.now().toString(),
+      id: `user-${Date.now()}`,
       role: 'user',
-      text: textToSend,
+      text: text,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     }
 
@@ -317,70 +339,54 @@ export default function Chat() {
     setLoading(true)
 
     try {
-      const res = await chatAPI.sendMessage(textToSend, sessionId)
-      const aiResponse = res.data
+      const res = await chatAPI.sendMessage(text, sessionId)
+      const data = res.data
 
-      const aiMsg = {
-        id: (Date.now() + 1).toString(),
+      const assistantMsg = {
+        id: `assistant-${Date.now()}`,
         role: 'assistant',
-        text: aiResponse.response,
-        module: aiResponse.module_used || 'SQL',
-        confidence: aiResponse.confidence,
+        text: data.response || 'Here is the summary based on your store records.',
+        module: data.module_used || data.module || 'SQL',
+        sql: data.sql_query || null,
+        executionTime: data.execution_time_ms || null,
+        confidence: data.confidence || null,
+        inventory_adjustment: data.inventory_adjustment || null,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       }
 
-      setMessages((prev) => [...prev, aiMsg])
-      // Refresh session list so recent preview updates
+      setMessages((prev) => [...prev, assistantMsg])
       loadSessions()
     } catch (err) {
-      toast.error('AI assistant service error. Check connection.')
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          module: 'ERROR',
-          text: '⚠️ Query process karne mein dikkat aayi. Please retry karein.',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        },
-      ])
+      console.error('Chat error:', err)
+      const errorMsg = {
+        id: `err-${Date.now()}`,
+        role: 'assistant',
+        module: 'INFO',
+        text: 'There isn\'t enough information in your current records to answer that question yet. You can rephrase, ask for general business advice, or check if the latest sales data is uploaded.',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      }
+      setMessages((prev) => [...prev, errorMsg])
     } finally {
       setLoading(false)
     }
   }
 
   const getModuleBadge = (module) => {
-    const m = (module || 'SQL').toUpperCase()
-    if (m === 'SQL') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-blue-500/15 text-blue-400 border border-blue-500/30">
-          <Database size={11} />
-          [SQL]
-        </span>
-      )
+    switch (module?.toUpperCase()) {
+      case 'SQL':
+        return { label: 'Store Sales Records', color: 'badge-blue', icon: Database }
+      case 'FORECAST':
+        return { label: 'Sales Forecast', color: 'badge-optimal', icon: TrendingUp }
+      case 'RAG':
+        return { label: 'Store Knowledge', color: 'badge-warning', icon: Boxes }
+      case 'CONSULTANT':
+        return { label: 'Business Guidance', color: 'badge-blue', icon: Sparkles }
+      case 'INVENTORY_ADJUSTMENT':
+      case 'INVENTORY_ADJUST':
+        return { label: 'Inventory Adjustment', color: 'badge-optimal', icon: Boxes }
+      default:
+        return { label: 'Store Intelligence', color: 'badge-blue', icon: Sparkles }
     }
-    if (m === 'FORECAST' || m === 'FORECASTING') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-purple-500/15 text-purple-400 border border-purple-500/30">
-          <TrendingUp size={11} />
-          [FORECAST]
-        </span>
-      )
-    }
-    if (m === 'INVENTORY') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
-          <Boxes size={11} />
-          [INVENTORY]
-        </span>
-      )
-    }
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-        <Sparkles size={11} />
-        [RAG]
-      </span>
-    )
   }
 
   return (
@@ -389,370 +395,457 @@ export default function Chat() {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.15 }}
-      className="flex flex-col lg:flex-row gap-4 h-[calc(100vh-5.5rem)]"
+      className="flex h-[calc(100vh-6.5rem)] relative gap-4"
     >
-      {/* ── LEFT PANEL: Terminal Command Hub & Chat History ── */}
-      <div className="hidden lg:flex lg:w-80 flex-col os-surface overflow-hidden">
-        {/* Header with New Chat & Clear */}
+      {/* ── Left Sidebar (History & Prompts) ── */}
+      <div
+        className={`${
+          showSessionsSidebar ? 'flex' : 'hidden'
+        } md:flex flex-col w-72 shrink-0 os-surface border border-[var(--border-color)] overflow-hidden transition-all duration-200 z-20 absolute md:relative h-full bg-[var(--bg-surface)] shadow-xl md:shadow-none`}
+      >
+        {/* Sidebar Header */}
         <div className="p-3.5 border-b border-[var(--border-color)] flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Terminal size={16} className="text-blue-500" />
-            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-main)]">AI Workspace</span>
+            <span className="text-xs font-bold text-[var(--text-main)]">
+              Conversations
+            </span>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--bg-surface-elevated)] text-[var(--text-dim)]">
+              {sessions.length}
+            </span>
           </div>
+
           <div className="flex items-center gap-1">
             <button
-              onClick={handleNewChat}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors cursor-pointer shadow-sm"
-              title="Start a new chat conversation"
+              onClick={handleNewSession}
+              className="p-1.5 rounded-lg bg-[var(--accent-subtle)] text-[var(--accent)] hover:bg-[var(--accent-subtle)]/80 transition-colors cursor-pointer"
+              title="New Conversation"
             >
-              <Plus size={12} />
-              <span>New</span>
+              <Plus size={14} />
             </button>
             <button
-              onClick={handleClearHistory}
-              className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
-              title="Clear current conversation"
+              onClick={() => setShowSessionsSidebar(false)}
+              className="md:hidden p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)]"
             >
-              <Trash2 size={13} />
+              <X size={14} />
             </button>
           </div>
         </div>
 
-        {/* Tab Switcher: Chat History vs Suggested Prompts */}
-        <div className="flex border-b border-[var(--border-color)] bg-[var(--bg-surface)] p-1 text-xs">
+        {/* Tab Selector */}
+        <div className="p-2 border-b border-[var(--border-subtle)] flex gap-1 bg-[var(--bg-surface-elevated)]">
           <button
             onClick={() => setActiveTab('history')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md font-medium transition-all ${
+            className={`flex-1 py-1 rounded text-xs font-medium transition-all ${
               activeTab === 'history'
-                ? 'bg-[var(--bg-surface-elevated)] text-blue-500 font-semibold shadow-xs'
+                ? 'bg-[var(--bg-surface)] text-[var(--text-main)] font-semibold shadow-xs'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
             }`}
           >
-            <MessageSquare size={13} />
-            <span>History ({sessions.length})</span>
+            History
           </button>
           <button
             onClick={() => setActiveTab('prompts')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md font-medium transition-all ${
+            className={`flex-1 py-1 rounded text-xs font-medium transition-all ${
               activeTab === 'prompts'
-                ? 'bg-[var(--bg-surface-elevated)] text-blue-500 font-semibold shadow-xs'
+                ? 'bg-[var(--bg-surface)] text-[var(--text-main)] font-semibold shadow-xs'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
             }`}
           >
-            <Zap size={13} />
-            <span>Prompts</span>
+            Suggestions
           </button>
         </div>
 
-        {/* Panel Content */}
-        <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5">
+        {/* Tab Content */}
+        <div className="flex-1 overflow-y-auto p-2 space-y-1.5 text-xs">
           {activeTab === 'history' ? (
-            sessions.length === 0 ? (
-              <div className="p-4 text-center text-xs text-[var(--text-muted)]">
-                <Clock size={20} className="mx-auto mb-2 opacity-50" />
-                <p>No past chat history yet.</p>
-                <p className="text-[11px] mt-1 text-[var(--text-muted)]">Conversations are saved automatically.</p>
-              </div>
-            ) : (
-              sessions.map((s) => {
-                const isActive = s.session_id === sessionId
-                return (
+            <>
+              {sessions.length === 0 ? (
+                <div className="py-8 text-center text-[var(--text-dim)]">
+                  <Clock size={20} className="mx-auto mb-1.5 opacity-40" />
+                  <span>No previous conversations.</span>
+                </div>
+              ) : (
+                sessions.map((sess) => (
                   <button
-                    key={s.session_id}
-                    onClick={() => handleSelectSession(s.session_id)}
-                    className={`w-full text-left p-2.5 rounded-lg border transition-all cursor-pointer flex flex-col gap-1 group ${
-                      isActive
-                        ? 'border-blue-500 bg-blue-500/10 text-[var(--text-main)]'
-                        : 'border-[var(--border-color)] bg-[var(--bg-surface-elevated)] hover:border-blue-500/50 text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                    key={sess.session_id}
+                    onClick={() => handleSwitchSession(sess.session_id)}
+                    className={`w-full text-left p-2.5 rounded-[3px] border-2 transition-all flex items-start gap-2.5 cursor-pointer ${
+                      sessionId === sess.session_id
+                        ? 'border-[var(--border-strong)] bg-[var(--accent)] text-[var(--accent-ink)] font-bold shadow-[2px_2px_0px_var(--border-strong)]'
+                        : 'border-transparent hover:border-[var(--border-color)] hover:bg-[var(--bg-surface-elevated)] text-[var(--text-main)]'
                     }`}
                   >
-                    <div className="flex items-center justify-between w-full">
-                      <span className="font-semibold text-xs text-[var(--text-main)] truncate max-w-[170px]">
-                        {s.title}
-                      </span>
-                      <span className="text-[10px] font-mono text-[var(--text-muted)]">
-                        {s.message_count} msgs
-                      </span>
-                    </div>
-                    {s.last_message && (
-                      <p className="text-[11px] text-[var(--text-muted)] truncate max-w-[220px]">
-                        {s.last_message}
-                      </p>
-                    )}
-                    <div className="flex items-center justify-between text-[10px] text-[var(--text-muted)] mt-0.5">
-                      <span>{s.last_active}</span>
-                      <ChevronRight size={11} className={`opacity-0 group-hover:opacity-100 ${isActive ? 'text-blue-500 opacity-100' : ''}`} />
+                    <MessageSquare size={14} className="mt-0.5 shrink-0 stroke-[2.2]" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-bold text-xs uppercase font-display tracking-tight">
+                        {sess.last_message ? sess.last_message.replace(/\*\*/g, '').replace(/###/g, '').trim() : 'New Question'}
+                      </div>
+                      <div className="text-[10px] font-mono text-[var(--text-dim)] flex items-center justify-between mt-1 opacity-80">
+                        <span>{sess.message_count} messages</span>
+                        <span>{sess.updated_at ? new Date(sess.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                      </div>
                     </div>
                   </button>
-                )
-              })
-            )
+                ))
+              )}
+            </>
           ) : (
             <div className="space-y-1.5">
-              <div className="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider mb-1 px-1">
-                Suggested Prompts
-              </div>
-              {suggestedCommands.map((cmd, idx) => (
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-dim)] block mb-1">
+                Common Business Questions
+              </span>
+              {suggestedCommands.map((cmd, i) => (
                 <button
-                  key={idx}
-                  onClick={() => handleSend(cmd.query)}
-                  className="w-full text-left p-2.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface-elevated)] hover:border-blue-500 hover:text-blue-500 text-xs font-medium text-[var(--text-main)] transition-all cursor-pointer flex items-center justify-between group"
+                  key={i}
+                  onClick={() => {
+                    handleSend(cmd.query)
+                    setShowSessionsSidebar(false)
+                  }}
+                  className="w-full text-left p-2.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface-elevated)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-all cursor-pointer group"
                 >
-                  <span className="truncate">{cmd.label}</span>
-                  <Zap size={12} className="opacity-0 group-hover:opacity-100 text-blue-500 shrink-0 ml-1" />
+                  <div className="font-medium text-[11px] leading-snug">
+                    {cmd.label}
+                  </div>
                 </button>
               ))}
             </div>
           )}
         </div>
+
+        {/* Clear History Button */}
+        <div className="p-2.5 border-t border-[var(--border-color)] bg-[var(--bg-surface-elevated)]">
+          <button
+            onClick={handleClearCurrentSession}
+            className="w-full py-1.5 px-3 rounded-lg border border-[var(--border-color)] text-[var(--text-muted)] hover:text-red-500 hover:border-red-500/30 transition-colors text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <Trash2 size={13} />
+            <span>Clear This Conversation</span>
+          </button>
+        </div>
       </div>
 
-      {/* ── RIGHT PANEL: Main Chat Screen ── */}
-      <div className="flex-1 flex flex-col os-surface overflow-hidden">
-        {/* Terminal Header */}
-        <div className="p-3.5 border-b border-[var(--border-color)] flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-main)]">
-              AI Business Co-Pilot
-            </span>
-            <span className="text-[10px] font-mono text-[var(--text-muted)]">
-              (Live PostgreSQL & Groq LLM)
-            </span>
+      {/* ── Main Chat Area ── */}
+      <div className="flex-1 flex flex-col os-surface border border-[var(--border-color)] overflow-hidden bg-[var(--bg-surface)]">
+        {/* Chat Canvas Header */}
+        <div className="h-14 border-b border-[var(--border-color)] px-4 flex items-center justify-between bg-[var(--bg-surface-elevated)]">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <button
+              onClick={() => setShowSessionsSidebar((prev) => !prev)}
+              className="p-1.5 rounded-lg border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface)] transition-colors cursor-pointer"
+              title="Toggle Conversations"
+            >
+              <Layers size={14} />
+            </button>
+
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-xs text-[var(--text-main)] truncate">
+                  AI Business Assistant
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20 font-semibold">
+                  Always Active
+                </span>
+              </div>
+              <p className="text-[10px] text-[var(--text-dim)] truncate">
+                Instant conversational intelligence from your store sales records and inventory
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => handleSend('Aaj ki total sales batao')}
-              disabled={loading}
-              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[11px] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors cursor-pointer"
+              onClick={handleNewSession}
+              className="btn-ghost text-xs py-1 px-2.5 hidden sm:inline-flex cursor-pointer"
             >
-              <RotateCcw size={11} />
-              <span>Today's Sales</span>
+              <Plus size={13} />
+              <span>New Question</span>
             </button>
           </div>
         </div>
 
-        {/* Message Thread */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Messages Canvas */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
           {historyLoading ? (
-            <div className="py-12 text-center text-xs text-[var(--text-muted)] font-mono animate-pulse">
-              Loading session history...
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="py-12 text-center text-xs text-[var(--text-muted)]">
-              Type or speak a question to begin.
+            <div className="h-full flex items-center justify-center text-[var(--text-dim)] text-xs font-mono">
+              <Loader2 className="w-5 h-5 animate-spin text-[var(--accent)] mr-2" />
+              Loading your conversation...
             </div>
           ) : (
             messages.map((msg) => {
               const isUser = msg.role === 'user'
+              const badge = !isUser ? getModuleBadge(msg.module) : null
+              const BadgeIcon = badge?.icon
 
               return (
                 <div
                   key={msg.id}
-                  className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
+                  className={`flex gap-3 max-w-3xl ${
+                    isUser ? 'ml-auto flex-row-reverse' : 'mr-auto'
+                  }`}
                 >
-                  <div className="flex items-center gap-2 mb-1 px-1">
-                    {!isUser && getModuleBadge(msg.module)}
-                    <span className="text-[10px] font-mono text-[var(--text-muted)]">
-                      {isUser ? 'You' : 'BusinessGPT'} &middot; {msg.timestamp}
-                    </span>
+                  {/* Avatar Icon */}
+                  <div
+                    className={`w-7 h-7 rounded-[3px] flex items-center justify-center shrink-0 mt-0.5 border-2 ${
+                      isUser
+                        ? 'bg-[var(--bg-surface-elevated)] border-[var(--border-color)] text-[var(--text-main)] shadow-[1px_1px_0px_var(--border-color)]'
+                        : 'bg-[var(--accent)] border-[var(--border-strong)] text-[var(--accent-ink)] shadow-[1px_1px_0px_var(--border-strong)]'
+                    }`}
+                  >
+                    {isUser ? <UserIcon size={14} className="stroke-[2.2]" /> : <Bot size={14} className="stroke-[2.2]" />}
                   </div>
 
-                  {isUser ? (
-                    <div className="max-w-xl p-3 rounded-xl bg-blue-600 text-white text-xs font-medium leading-relaxed shadow-sm">
-                      {msg.text}
+                  {/* Message Bubble & Meta */}
+                  <div className={`space-y-1.5 min-w-0 ${isUser ? 'items-end' : 'items-start'}`}>
+                    {/* Header info */}
+                    <div className={`flex items-center gap-2 text-[10px] font-mono text-[var(--text-dim)] ${isUser ? 'justify-end' : 'justify-start'}`}>
+                      {!isUser && badge && (
+                        <span className={`px-1.5 py-0.2 rounded-[2px] border text-[9px] font-bold flex items-center gap-1 ${badge.color}`}>
+                          {BadgeIcon && <BadgeIcon size={10} />}
+                          {badge.label}
+                        </span>
+                      )}
+                      <span>{msg.timestamp}</span>
                     </div>
-                  ) : (
-                    <div className="max-w-2xl p-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface-elevated)] text-xs text-[var(--text-main)] leading-relaxed prose prose-invert max-w-none">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          table: ({ node, ...props }) => (
-                            <div className="overflow-x-auto my-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)]">
-                              <table className="w-full text-left text-xs border-collapse" {...props} />
-                            </div>
-                          ),
-                          thead: ({ node, ...props }) => <thead className="bg-blue-600/10 border-b border-[var(--border-color)] text-blue-400 font-mono text-[11px] uppercase tracking-wider" {...props} />,
-                          th: ({ node, ...props }) => <th className="px-3.5 py-2 font-bold whitespace-nowrap border-r border-[var(--border-color)] last:border-r-0" {...props} />,
-                          td: ({ node, ...props }) => <td className="px-3.5 py-2 border-t border-[var(--border-color)] border-r border-[var(--border-color)] last:border-r-0 text-[var(--text-main)] whitespace-nowrap" {...props} />,
-                          tr: ({ node, ...props }) => <tr className="hover:bg-blue-500/5 transition-colors odd:bg-transparent even:bg-[var(--bg-surface-elevated)]/40" {...props} />,
-                        }}
-                      >
-                        {msg.text}
-                      </ReactMarkdown>
+
+                    {/* Text Body */}
+                    <div
+                      className={`p-3.5 rounded-[4px] text-xs sm:text-sm leading-relaxed ${
+                        isUser
+                          ? 'bg-[var(--accent)] text-[var(--accent-ink)] font-bold border-2 border-[var(--border-strong)] shadow-[3px_3px_0px_var(--border-strong)] rounded-tr-none'
+                          : 'bg-[var(--bg-surface-elevated)] border-2 border-[var(--border-color)] text-[var(--text-main)] shadow-[3px_3px_0px_var(--border-color)] rounded-tl-none'
+                      }`}
+                    >
+                      {isUser ? (
+                        <div className="whitespace-pre-wrap font-sans text-[var(--accent-ink)]">{msg.text}</div>
+                      ) : (
+                        <div className="prose prose-sm dark:prose-invert max-w-none text-xs sm:text-sm space-y-2">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              table: ({ node, ...props }) => (
+                                <div className="overflow-x-auto my-2 rounded-[3px] border-2 border-[var(--border-color)]">
+                                  <table className="w-full text-xs divide-y divide-[var(--border-subtle)]" {...props} />
+                                </div>
+                              ),
+                              th: ({ node, ...props }) => (
+                                <th className="px-3 py-2 bg-[var(--bg-surface)] text-left font-bold text-[var(--text-main)] font-mono uppercase text-[10px]" {...props} />
+                              ),
+                              td: ({ node, ...props }) => (
+                                <td className="px-3 py-2 whitespace-nowrap text-[var(--text-muted)] font-mono" {...props} />
+                              ),
+                              code: ({ node, inline, ...props }) => (
+                                inline ? (
+                                  <code className="px-1.5 py-0.5 rounded-[2px] bg-[var(--bg-surface)] text-[var(--text-main)] border border-[var(--border-color)] font-mono text-[11px] font-bold" {...props} />
+                                ) : (
+                                  <div className="p-3 my-2 rounded-[3px] bg-[var(--bg-main)] border-2 border-[var(--border-color)] overflow-x-auto">
+                                    <code className="font-mono text-[11px] text-[var(--text-main)]" {...props} />
+                                  </div>
+                                )
+                              )
+                            }}
+                          >
+                            {(msg.text || '')
+                              .replace(/Live PostgreSQL Store Database/gi, 'Live Store Database')
+                              .replace(/PostgreSQL Store Database/gi, 'Live Store Database')
+                              .replace(/PostgreSQL/gi, 'Store Database')
+                              .replace(/ChromaDB/gi, 'Store Knowledge Base')
+                              .replace(/Vector database/gi, 'Store Knowledge Base')}
+                          </ReactMarkdown>
+                        </div>
+                      )}
                     </div>
-                  )}
+
+                    {/* Interactive Conversational Inventory Confirmation Card */}
+                    {!isUser && msg.inventory_adjustment?.status === 'PENDING_CONFIRMATION' && (
+                      <div className="mt-2.5 p-3 rounded-[3px] bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-500 shadow-[2px_2px_0px_rgba(245,158,11,0.5)] flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                        <span className="text-xs font-mono font-bold text-amber-900 dark:text-amber-200">
+                          Kya aap yeh stock update confirm karna chahte hain?
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSend('Nahi')}
+                            className="px-3 py-1 rounded-[2px] bg-red-100 hover:bg-red-200 text-red-800 border border-red-300 font-mono text-xs font-bold cursor-pointer"
+                          >
+                            Nahi (Cancel)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSend('Haan')}
+                            className="px-3 py-1 rounded-[2px] bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-800 font-mono text-xs font-bold cursor-pointer"
+                          >
+                            Haan (Confirm)
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Subtle Source Citation (No raw SQL code dumping) */}
+                    {!isUser && (msg.sql || msg.executionTime) && (
+                      <div className="flex items-center gap-2 text-[10px] text-[var(--text-dim)] font-mono px-1">
+                        <FileCheck2 size={11} className="text-emerald-500" />
+                        <span>Source: Verified store transaction records</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )
             })
           )}
 
+          {/* Friendly Analyzing Indicator */}
           {loading && (
-            <div className="p-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface-elevated)] max-w-md animate-pulse">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-[10px] font-mono text-blue-500">Generating SQL & executing query...</span>
+            <div className="flex gap-3 max-w-xl">
+              <div className="w-7 h-7 rounded-[3px] bg-[var(--accent)] text-[var(--accent-ink)] border-2 border-[var(--border-strong)] shadow-[1px_1px_0px_var(--border-strong)] flex items-center justify-center shrink-0">
+                <Bot size={14} className="stroke-[2.2]" />
               </div>
-              <div className="h-3 bg-[var(--border-color)] rounded w-3/4 mb-1.5"></div>
-              <div className="h-3 bg-[var(--border-color)] rounded w-1/2"></div>
+              <div className="p-3.5 rounded-[4px] bg-[var(--bg-surface-elevated)] border-2 border-[var(--border-color)] text-xs flex items-center gap-2 text-[var(--text-muted)] font-mono shadow-[2px_2px_0px_var(--border-color)]">
+                <Loader2 size={14} className="animate-spin text-[var(--accent)]" />
+                <span>Reviewing your store numbers and calculating response...</span>
+              </div>
             </div>
           )}
 
           <div ref={chatBottomRef} />
         </div>
 
-        {/* Terminal Input Bar */}
-        <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-surface)]">
-          {/* Active Voice Recording Status Bar */}
+        {/* Voice Recording Active Banner */}
+        <AnimatePresence>
           {isRecording && (
-            <div className="mb-2 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center justify-between text-xs animate-in fade-in">
-              <div className="flex items-center gap-2 text-red-400 font-mono">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping inline-block" />
-                <span className="font-semibold">
-                  Recording ({Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')})
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="px-4 py-3 bg-red-500/10 border-t border-red-500/30 flex items-center justify-between text-xs"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+                <span className="font-semibold text-red-500 font-mono">
+                  Listening ({recordingSeconds}s / 60s max)
                 </span>
-                <span className="text-[10px] text-[var(--text-muted)] hidden sm:inline">
-                  • Language: {voiceLanguage.toUpperCase()}
+                <span className="text-[11px] text-[var(--text-muted)] hidden sm:inline">
+                  Speak Hindi, Hinglish, or English clearly
                 </span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={cancelRecording}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[var(--bg-surface-elevated)] hover:bg-[var(--border-color)] text-[var(--text-muted)] hover:text-red-400 text-[11px] font-medium transition-colors cursor-pointer"
-                  aria-label="Cancel and discard recording"
-                >
-                  <X size={12} /> Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={stopRecording}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-red-600 hover:bg-red-500 text-white font-semibold text-[11px] transition-colors shadow-sm shadow-red-500/20 cursor-pointer"
-                  aria-label="Stop recording and transcribe"
-                >
-                  <Square size={11} /> Stop & Transcribe
-                </button>
-              </div>
-            </div>
-          )}
 
-          {/* Voice Settings Bar (Collapsible) */}
-          {showVoiceSettings && (
-            <div className="mb-2 p-2.5 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] flex flex-wrap items-center justify-between gap-3 text-xs text-[var(--text-muted)]">
               <div className="flex items-center gap-2">
-                <Globe size={13} className="text-blue-400" />
-                <span className="font-medium text-[var(--text-main)]">Voice Language Hint:</span>
-                <select
-                  value={voiceLanguage}
-                  onChange={(e) => {
-                    setVoiceLanguage(e.target.value)
-                    localStorage.setItem('businessgpt_voice_lang', e.target.value)
-                  }}
-                  className="px-2 py-1 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] text-xs text-[var(--text-main)] focus:outline-none"
+                <button
+                  onClick={cancelRecording}
+                  className="px-2.5 py-1 rounded bg-[var(--bg-surface)] text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-xs cursor-pointer"
                 >
-                  <option value="auto">Auto Detect (Hinglish / English / Hindi)</option>
-                  <option value="hi">Hindi (हिन्दी)</option>
-                  <option value="en">English</option>
-                  <option value="mr">Marathi (मराठी)</option>
-                </select>
+                  Cancel
+                </button>
+                <button
+                  onClick={stopRecording}
+                  className="px-3 py-1 rounded bg-red-600 text-white font-semibold hover:bg-red-700 text-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <Square size={11} fill="white" />
+                  <span>Done</span>
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Transcribing Indicator Banner */}
+        {transcribing && (
+          <div className="px-4 py-2.5 bg-blue-500/10 border-t border-blue-500/30 flex items-center gap-2 text-xs text-[var(--accent)] font-medium">
+            <Loader2 size={13} className="animate-spin" />
+            <span>Processing your voice message...</span>
+          </div>
+        )}
+
+        {/* Composer Input Bar */}
+        <div className="p-3 sm:p-4 border-t border-[var(--border-color)] bg-[var(--bg-surface-elevated)]">
+          {/* Quick Voice Settings Panel */}
+          {showVoiceSettings && (
+            <div className="mb-3 p-3 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] text-xs flex flex-wrap items-center justify-between gap-3 animate-in fade-in">
+              <div className="flex items-center gap-3">
+                <span className="font-semibold text-[var(--text-main)]">Language:</span>
+                <div className="flex gap-1">
+                  {[
+                    { id: 'auto', label: 'Auto Detect' },
+                    { id: 'hi', label: 'Hindi' },
+                    { id: 'en', label: 'English' },
+                  ].map((l) => (
+                    <button
+                      key={l.id}
+                      onClick={() => handleVoiceLanguageChange(l.id)}
+                      className={`px-2 py-0.5 rounded-[2px] text-[11px] font-mono cursor-pointer font-bold ${
+                        voiceLanguage === l.id
+                          ? 'bg-[var(--accent)] text-[var(--accent-ink)] border border-[var(--border-strong)] shadow-[1px_1px_0px_var(--border-strong)]'
+                          : 'bg-[var(--bg-surface-elevated)] text-[var(--text-muted)] border border-[var(--border-color)]'
+                      }`}
+                    >
+                      {l.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={autoSendVoice}
-                  onChange={(e) => {
-                    setAutoSendVoice(e.target.checked)
-                    localStorage.setItem('businessgpt_voice_autosend', String(e.target.checked))
-                  }}
-                  className="rounded border-[var(--border-color)] text-blue-600 focus:ring-0 cursor-pointer"
-                />
-                <span className="text-[11px]">Auto-execute query after transcribing</span>
-              </label>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-[var(--text-muted)]">
+                  <input
+                    type="checkbox"
+                    checked={autoSendVoice}
+                    onChange={handleAutoSendToggle}
+                    className="rounded text-[var(--accent)]"
+                  />
+                  <span>Send automatically after speaking</span>
+                </label>
+              </div>
             </div>
           )}
 
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (isRecording) {
-                stopRecording()
-              } else {
-                handleSend()
-              }
-            }}
-            className="flex items-center gap-2"
-          >
-            <div className="relative flex-1">
-              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-blue-500 font-mono text-xs">
-                $&gt;
-              </div>
-              <input
-                type="text"
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                placeholder={
-                  transcribing
-                    ? 'Transcribing voice input with Groq Whisper...'
-                    : isRecording
-                    ? 'Listening... Click Stop when finished speaking'
-                    : 'Ask numbers, revenue, inventory, or forecasting in English or Hinglish...'
-                }
-                disabled={loading || transcribing}
-                aria-label="Chat query input"
-                className="w-full pl-9 pr-4 py-2.5 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-xs text-[var(--text-main)] focus:outline-none focus:border-blue-500 font-sans"
-              />
-            </div>
-
-            {/* Voice Settings Toggle Button */}
+          <div className="flex items-end gap-2 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl p-2 focus-within:border-[var(--accent)] transition-all">
             <button
               type="button"
               onClick={() => setShowVoiceSettings((prev) => !prev)}
-              className={`p-2.5 rounded-lg border transition-all text-xs cursor-pointer ${
-                showVoiceSettings
-                  ? 'bg-blue-600/20 text-blue-400 border-blue-500/40'
-                  : 'bg-[var(--bg-surface-elevated)] hover:bg-[var(--border-color)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-blue-400'
-              }`}
-              title="Voice settings (Language & Auto-execute)"
-              aria-label="Voice settings"
+              className="p-2 rounded-lg text-[var(--text-dim)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)] transition-colors cursor-pointer"
+              title="Voice Settings"
             >
               <Settings2 size={16} />
             </button>
 
-            {/* Voice Input Microphone Recording Button */}
+            {/* Voice Record Mic Trigger */}
             <button
               type="button"
               onClick={isRecording ? stopRecording : startRecording}
-              disabled={loading || transcribing}
-              className={`p-2.5 rounded-lg border transition-all text-xs font-semibold cursor-pointer ${
+              disabled={transcribing}
+              className={`p-2 rounded-lg transition-all cursor-pointer ${
                 isRecording
-                  ? 'bg-red-600 text-white border-red-500 shadow-sm shadow-red-500/30 animate-pulse'
-                  : transcribing
-                  ? 'bg-blue-600/20 text-blue-400 border-blue-500/30 cursor-wait'
-                  : 'bg-[var(--bg-surface-elevated)] hover:bg-[var(--border-color)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-blue-500'
+                  ? 'bg-red-600 text-white animate-pulse'
+                  : 'text-[var(--text-dim)] hover:text-red-500 hover:bg-red-500/10'
               }`}
-              title={isRecording ? 'Stop recording & transcribe' : 'Record voice with Groq Whisper'}
-              aria-label={isRecording ? 'Stop recording & transcribe' : 'Record voice input'}
+              title={isRecording ? 'Stop Recording' : 'Record voice message'}
             >
-              {transcribing ? (
-                <Loader2 size={16} className="animate-spin text-blue-400" />
-              ) : isRecording ? (
-                <Square size={16} className="text-white" />
-              ) : (
-                <Mic size={16} />
-              )}
+              <Mic size={16} />
             </button>
 
+            <textarea
+              rows="1"
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  handleSend()
+                }
+              }}
+              placeholder="Ask anything about today's sales, forecast, low stock, or profit margins..."
+              className="flex-1 bg-transparent border-none text-[var(--text-main)] placeholder-[var(--text-dim)] text-xs sm:text-sm resize-none focus:outline-none min-h-[36px] max-h-32 p-1.5"
+            />
+
             <button
-              type="submit"
-              disabled={loading || transcribing || !inputMessage.trim()}
-              className="btn-accent px-4 py-2.5 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-              aria-label="Execute chat query"
+              type="button"
+              onClick={() => handleSend()}
+              disabled={!inputMessage.trim() || loading}
+              className="btn-accent py-2 px-3.5 text-xs font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Send size={14} />
-              <span className="hidden sm:inline">Execute</span>
+              <span className="hidden sm:inline">Ask</span>
             </button>
-          </form>
+          </div>
         </div>
       </div>
     </motion.div>

@@ -62,7 +62,12 @@ export const inventoryAPI = {
   addStock: (data) => api.post('/inventory/add-stock', data),
   createProduct: (data) => api.post('/inventory/product', data),
   updateProduct: (id, data) => api.put(`/inventory/product/${id}`, data),
+  deleteProduct: (id) => api.delete(`/inventory/product/${id}`),
   getTransactions: (limit = 50) => api.get('/inventory/transactions', { params: { limit } }),
+  naturalAdjust: (message, session_id = null) => api.post('/inventory/natural-adjust', { message, session_id }),
+  confirmAdjust: (pending_id = null, session_id = null) => api.post('/inventory/natural-adjust/confirm', { pending_id, session_id }),
+  cancelAdjust: (pending_id = null, session_id = null) => api.post('/inventory/natural-adjust/cancel', { pending_id, session_id }),
+  getPendingAdjust: (session_id = null) => api.get('/inventory/natural-adjust/pending', { params: session_id ? { session_id } : {} }),
 }
 
 export const analyticsAPI = {
@@ -116,6 +121,19 @@ export const reportsAPI = {
 export const marketAPI = {
   getSeasonal: () => api.get('/market/seasonal'),
   getTrends: (category = 'Grocery', region = 'IN') => api.post('/market/trends', { category, region }),
+  getNewArrivals: () => api.get('/market/new-arrivals'),
+  adoptProduct: (data) => api.post('/market/adopt-product', data),
+}
+
+export const customerAPI = {
+  getSettings: () => api.get('/customers/settings'),
+  updateSettings: (data) => api.put('/customers/settings', data),
+  getCustomers: (params = {}) => api.get('/customers', { params }),
+  searchCustomers: (q) => api.get('/customers/search', { params: { q } }),
+  getCustomer: (id) => api.get(`/customers/${id}`),
+  createCustomer: (data) => api.post('/customers', data),
+  updateCustomer: (id, data) => api.put(`/customers/${id}`, data),
+  deleteCustomer: (id) => api.delete(`/customers/${id}`),
 }
 
 export const settingsAPI = {

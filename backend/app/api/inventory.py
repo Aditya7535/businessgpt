@@ -249,6 +249,24 @@ def update_product(
     db.refresh(prod)
     return prod
 
+@router.delete("/product/{product_id}")
+def delete_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["MANAGER", "OWNER"]))
+):
+    """Permanently delete a product from store inventory."""
+    prod = db.query(Product).filter(Product.id == product_id).first()
+    if not prod:
+        raise HTTPException(status_code=404, detail="Product not found.")
+
+    p_name = prod.name
+    db.query(StockTransaction).filter(StockTransaction.product_id == product_id).delete()
+    db.delete(prod)
+    db.commit()
+
+    return {"message": f"Product '{p_name}' successfully deleted from catalog.", "product_id": product_id}
+
 
 @router.get("/transactions")
 def get_stock_transactions(
@@ -275,3 +293,146 @@ def get_stock_transactions(
             "notes": t.notes
         })
     return results
+
+
+# ─── Conversational Natural Language Inventory Adjustment Endpoints ───
+
+class NaturalAdjustRequest(BaseModel):
+    message: str = Field(..., min_length=1, description="Spoken or typed natural language update")
+    session_id: Optional[str] = None
+    store_id: Optional[int] = 1
+    source: Optional[str] = "inventory_ui"
+
+
+class ConfirmAdjustRequest(BaseModel):
+    session_id: Optional[str] = None
+    pending_id: Optional[int] = None
+
+
+class CancelAdjustRequest(BaseModel):
+    session_id: Optional[str] = None
+    pending_id: Optional[int] = None
+
+
+@router.post("/natural-adjust")
+def natural_inventory_adjustment(
+    payload: NaturalAdjustRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["EMPLOYEE", "MANAGER", "OWNER"]))
+):
+    """
+    Parses conversational stock updates in Hindi, Hinglish, Marathi, or English.
+    Returns structured preview summary requiring mandatory confirmation.
+    """
+    from app.modules.inventory.conversational import handle_conversational_inventory
+
+    session_id = payload.session_id or f"user_{current_user.id}"
+    store_id = payload.store_id or getattr(current_user, "store_id", 1) or 1
+
+    result = handle_conversational_inventory(
+        query=payload.message,
+        session_id=session_id,
+        user=current_user,
+        store_id=store_id,
+        db=db,
+        source=payload.source or "inventory_ui"
+    )
+    return result
+
+
+@router.post("/natural-adjust/confirm")
+def confirm_natural_inventory_adjustment(
+    payload: ConfirmAdjustRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["EMPLOYEE", "MANAGER", "OWNER"]))
+):
+    """
+    Executes a previously staged natural language inventory adjustment atomically.
+    Guarantees idempotency and updates stock transactions audit ledger.
+    """
+    from app.models.inventory_adjustment import PendingInventoryAdjustment
+    from app.modules.inventory.conversational import execute_confirmed_adjustment
+
+    query = db.query(PendingInventoryAdjustment).filter(PendingInventoryAdjustment.status == "PENDING")
+    if payload.pending_id:
+        pending = query.filter(PendingInventoryAdjustment.id == payload.pending_id).first()
+    elif payload.session_id:
+        pending = query.filter(PendingInventoryAdjustment.session_id == payload.session_id).order_by(desc(PendingInventoryAdjustment.created_at)).first()
+    else:
+        pending = query.filter(PendingInventoryAdjustment.session_id == f"user_{current_user.id}").order_by(desc(PendingInventoryAdjustment.created_at)).first()
+
+    if not pending:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Koi pending stock update nahi mila ya yeh pehle hi confirm ho chuka hai."
+        )
+
+    result = execute_confirmed_adjustment(db, pending, current_user.id)
+    return result
+
+
+@router.post("/natural-adjust/cancel")
+def cancel_natural_inventory_adjustment(
+    payload: CancelAdjustRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["EMPLOYEE", "MANAGER", "OWNER"]))
+):
+    """
+    Cancels a pending staged inventory adjustment without mutating stock.
+    """
+    from app.models.inventory_adjustment import PendingInventoryAdjustment
+
+    query = db.query(PendingInventoryAdjustment).filter(PendingInventoryAdjustment.status == "PENDING")
+    if payload.pending_id:
+        pending = query.filter(PendingInventoryAdjustment.id == payload.pending_id).first()
+    elif payload.session_id:
+        pending = query.filter(PendingInventoryAdjustment.session_id == payload.session_id).order_by(desc(PendingInventoryAdjustment.created_at)).first()
+    else:
+        pending = query.filter(PendingInventoryAdjustment.session_id == f"user_{current_user.id}").order_by(desc(PendingInventoryAdjustment.created_at)).first()
+
+    if not pending:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Koi pending stock update nahi mila."
+        )
+
+    pending.status = "CANCELLED"
+    db.commit()
+    return {
+        "status": "CANCELLED",
+        "response": "Stock update cancel kar diya gaya hai. Store inventory mein koi badlaav nahi hua."
+    }
+
+
+@router.get("/natural-adjust/pending")
+def get_pending_natural_adjustment(
+    session_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["EMPLOYEE", "MANAGER", "OWNER"]))
+):
+    """
+    Checks if there is an active pending stock adjustment waiting for confirmation.
+    """
+    from app.models.inventory_adjustment import PendingInventoryAdjustment
+    import json
+
+    target_session = session_id or f"user_{current_user.id}"
+    pending = db.query(PendingInventoryAdjustment).filter(
+        PendingInventoryAdjustment.session_id == target_session,
+        PendingInventoryAdjustment.status == "PENDING"
+    ).order_by(desc(PendingInventoryAdjustment.created_at)).first()
+
+    if not pending:
+        return {"has_pending": False, "pending": None}
+
+    return {
+        "has_pending": True,
+        "pending": {
+            "id": pending.id,
+            "session_id": pending.session_id,
+            "summary_text": pending.summary_text,
+            "movements": json.loads(pending.movements_json),
+            "created_at": pending.created_at.isoformat() if pending.created_at else None,
+            "status": pending.status
+        }
+    }

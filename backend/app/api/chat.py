@@ -30,6 +30,7 @@ class ChatResponse(BaseModel):
     sources: List[str]
     confidence: float
     session_id: str = "default"
+    inventory_adjustment: Optional[Dict[str, Any]] = None
 
 class ChatMessageItem(BaseModel):
     id: str
@@ -74,7 +75,13 @@ async def chat_endpoint(
 
     try:
         # 2. Run LangGraph Orchestrator
-        final_state = app_graph.invoke({"query": request.message})
+        final_state = app_graph.invoke({
+            "query": request.message,
+            "session_id": session_id,
+            "store_id": getattr(current_user, "store_id", 1) or 1,
+            "user_id": current_user.id,
+            "source": "ai_chat"
+        })
         
         reply_text = final_state.get("final_response", "I could not generate an answer.")
         module_used = final_state.get("module_used", "general")
@@ -102,7 +109,8 @@ async def chat_endpoint(
             module_used=module_used,
             sources=sources,
             confidence=confidence,
-            session_id=session_id
+            session_id=session_id,
+            inventory_adjustment=final_state.get("inventory_adjustment")
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error executing orchestrator: {str(e)}")

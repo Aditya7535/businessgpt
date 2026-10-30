@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { inventoryAPI } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -14,9 +14,45 @@ import {
   CheckCircle2,
   TrendingUp,
   X,
-  Edit2
+  Edit2,
+  Package,
+  Layers,
+  Sparkles,
+  Mic,
+  MicOff,
+  Check,
+  AlertCircle,
+  Trash2
 } from 'lucide-react'
+import { voiceAPI } from '../services/api'
 import toast from 'react-hot-toast'
+
+const STANDARD_CATEGORIES = [
+  'Grocery',
+  'Dairy & Eggs',
+  'Snacks',
+  'Beverages',
+  'Personal Care',
+  'Household',
+  'Spices & Masalas',
+  'Grains & Pulses',
+  'Bakery',
+  'Instant Food',
+  'Other',
+]
+
+const STANDARD_UNITS = [
+  'pcs',
+  'kg',
+  'gm',
+  'ltr',
+  'ml',
+  'packet',
+  'box',
+  'bottle',
+  'can',
+  'unit',
+]
 
 export default function Inventory() {
   const { hasRole } = useAuth()
@@ -25,6 +61,19 @@ export default function Inventory() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedStatus, setSelectedStatus] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('')
+
+  const availableCategories = useMemo(() => {
+    const existing = products.map((p) => p.category).filter(Boolean)
+    return Array.from(new Set([...STANDARD_CATEGORIES, ...existing]))
+  }, [products])
+
+  // Conversational Natural Language Inventory State
+  const [naturalQuery, setNaturalQuery] = useState('')
+  const [naturalLoading, setNaturalLoading] = useState(false)
+  const [pendingAdjustment, setPendingAdjustment] = useState(null)
+  const [confirmingAdjustment, setConfirmingAdjustment] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
 
   // Modals
   const [showAddStockModal, setShowAddStockModal] = useState(false)
@@ -81,9 +130,10 @@ export default function Inventory() {
     const matchesSearch =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.category.toLowerCase().includes(searchQuery.toLowerCase())
+      (p.category && p.category.toLowerCase().includes(searchQuery.toLowerCase()))
     const matchesStatus = !selectedStatus || p.status === selectedStatus
-    return matchesSearch && matchesStatus
+    const matchesCategory = !selectedCategory || p.category === selectedCategory
+    return matchesSearch && matchesStatus && matchesCategory
   })
 
   // Add stock submit
@@ -101,23 +151,22 @@ export default function Inventory() {
         quantity: parseInt(addStockQty),
         notes: addStockNotes,
       })
-      toast.success(`Restocked ${addStockQty} units of ${selectedProduct.name}!`)
+      toast.success(`Added ${addStockQty} units to ${selectedProduct.name}`)
       setShowAddStockModal(false)
       setAddStockQty('')
-      setSelectedProduct(null)
       fetchData()
     } catch (err) {
-      toast.error('Failed to restock product.')
+      toast.error('Failed to update stock.')
     } finally {
       setSubmitting(false)
     }
   }
 
-  // Add product submit
+  // Create product submit
   const handleCreateProduct = async (e) => {
     e.preventDefault()
     if (!newProdForm.name || !newProdForm.sku || !newProdForm.unit_price) {
-      toast.error('Please complete all required fields.')
+      toast.error('Please fill in required fields.')
       return
     }
 
@@ -129,7 +178,7 @@ export default function Inventory() {
         current_stock: parseInt(newProdForm.current_stock || 0),
         reorder_point: parseInt(newProdForm.reorder_point || 10),
       })
-      toast.success('Product created successfully!')
+      toast.success(`Product '${newProdForm.name}' created!`)
       setShowAddProductModal(false)
       setNewProdForm({
         name: '',
@@ -148,7 +197,45 @@ export default function Inventory() {
     }
   }
 
-  // Edit product submit
+  // Delete product handler
+
+  const handleDeleteProduct = async (product) => {
+
+    if (!product) return
+
+    const confirmed = window.confirm(`Kya aap sach mein "${product.name}" (${product.sku}) ko catalog se delete karna chahte hain?`)
+
+    if (!confirmed) return
+
+
+
+    try {
+
+      setLoading(true)
+
+      await inventoryAPI.deleteProduct(product.id)
+
+      toast.success(`Product "${product.name}" successfully delete ho gaya.`)
+
+      setShowEditProductModal(false)
+
+      fetchData()
+
+    } catch (err) {
+
+      toast.error(err.response?.data?.detail || 'Product delete nahi ho paya.')
+
+    } finally {
+
+      setLoading(false)
+
+    }
+
+  }
+
+
+
+  // Update product submit
   const handleUpdateProduct = async (e) => {
     e.preventDefault()
     if (!selectedProduct) return
@@ -163,9 +250,8 @@ export default function Inventory() {
         reorder_point: parseInt(editProdForm.reorder_point),
         unit: editProdForm.unit,
       })
-      toast.success('Product updated successfully!')
+      toast.success(`Product updated!`)
       setShowEditProductModal(false)
-      setSelectedProduct(null)
       fetchData()
     } catch (err) {
       toast.error('Failed to update product.')
@@ -176,21 +262,13 @@ export default function Inventory() {
 
   // Export CSV
   const handleExportCSV = () => {
-    if (products.length === 0) return
-    const headers = ['ID', 'Name', 'SKU', 'Category', 'Unit Price (INR)', 'Current Stock', 'Reorder Point', 'Unit', 'Status', 'Valuation (INR)']
-    const rows = products.map((p) => [
-      p.id,
-      `"${p.name}"`,
-      p.sku,
-      p.category,
-      p.unit_price,
-      p.current_stock,
-      p.reorder_point,
-      p.unit,
-      p.status,
-      p.total_value,
-    ])
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
+    if (!products.length) return
+    const headers = ['ID,SKU,Name,Category,Stock,Unit,UnitPrice,ReorderPoint,Status']
+    const rows = products.map(
+      (p) =>
+        `${p.id},"${p.sku}","${p.name}","${p.category || ''}",${p.current_stock},"${p.unit || 'pcs'}",${p.unit_price},${p.reorder_point || 10},"${p.status}"`
+    )
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers, ...rows].join('\n')
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement('a')
     link.setAttribute('href', encodedUri)
@@ -198,19 +276,153 @@ export default function Inventory() {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    toast.success('Inventory exported to CSV!')
+    toast.success('Inventory CSV exported.')
   }
 
-  const getBadgeStyle = (status) => {
+  const getStatusBadge = (status) => {
     switch (status) {
       case 'CRITICAL':
-        return 'badge-critical'
+        return <span className="badge-critical">CRITICAL</span>
       case 'LOW':
-        return 'badge-low'
+        return <span className="badge-low">LOW STOCK</span>
+      case 'OPTIMAL':
+        return <span className="badge-optimal">OPTIMAL</span>
       case 'OVERSTOCK':
-        return 'badge-overstock'
+        return <span className="badge-overstock">OVERSTOCK</span>
       default:
-        return 'badge-optimal'
+        return <span className="badge-optimal">{status}</span>
+    }
+  }
+
+  // Check pending natural adjustment on load
+  useEffect(() => {
+    const checkPending = async () => {
+      try {
+        const res = await inventoryAPI.getPendingAdjust()
+        if (res.data?.has_pending && res.data?.pending) {
+          setPendingAdjustment({
+            pending_id: res.data.pending.id,
+            response: res.data.pending.summary_text,
+            proposals: res.data.pending.movements,
+            status: 'PENDING_CONFIRMATION'
+          })
+        }
+      } catch (err) {
+        // silent
+      }
+    }
+    checkPending()
+  }, [])
+
+  // Natural language adjustment submission
+  const handleNaturalSubmit = async (e) => {
+    if (e) e.preventDefault()
+    const query = naturalQuery.trim()
+    if (!query) {
+      toast.error('Kripya stock update likhein ya bolein.')
+      return
+    }
+
+    try {
+      setNaturalLoading(true)
+      const res = await inventoryAPI.naturalAdjust(query)
+      const data = res.data
+
+      if (data.status === 'PENDING_CONFIRMATION') {
+        setPendingAdjustment(data)
+        toast('Confirm karne ke liye neeche button dabayein.', { icon: '📋' })
+      } else if (data.status === 'CONFIRMED') {
+        toast.success(data.response || 'Stock successfully update ho gaya!')
+        setPendingAdjustment(null)
+        setNaturalQuery('')
+        fetchData()
+      } else if (data.status === 'CANCELLED') {
+        toast(data.response || 'Update cancel kar diya gaya.', { icon: '🛑' })
+        setPendingAdjustment(null)
+        setNaturalQuery('')
+      } else {
+        toast(data.response || 'Please statement check karein.', { icon: 'ℹ️' })
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Stock update parse karne mein dikkat aayi.')
+    } finally {
+      setNaturalLoading(false)
+    }
+  }
+
+  // Confirm natural adjustment
+  const handleConfirmAdjustment = async () => {
+    if (!pendingAdjustment?.pending_id) return
+    try {
+      setConfirmingAdjustment(true)
+      const res = await inventoryAPI.confirmAdjust(pendingAdjustment.pending_id)
+      toast.success(res.data?.response || 'Stock successfully update ho gaya!')
+      setPendingAdjustment(null)
+      setNaturalQuery('')
+      fetchData()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Confirmation mein error aayi.')
+    } finally {
+      setConfirmingAdjustment(false)
+    }
+  }
+
+  // Cancel natural adjustment
+  const handleCancelAdjustment = async () => {
+    if (!pendingAdjustment?.pending_id) return
+    try {
+      await inventoryAPI.cancelAdjust(pendingAdjustment.pending_id)
+      toast('Stock update cancel kar diya gaya.', { icon: '🛑' })
+      setPendingAdjustment(null)
+    } catch (err) {
+      toast.error('Cancel nahi ho paya.')
+    }
+  }
+
+  // Voice recording toggle via Web Speech API or voiceAPI
+  const toggleRecording = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      toast.error('Aapka browser Web Speech API support nahi karta. Text likhein.')
+      return
+    }
+
+    if (isRecording) {
+      setIsRecording(false)
+      return
+    }
+
+    try {
+      const recognition = new SpeechRecognition()
+      recognition.continuous = false
+      recognition.interimResults = false
+      recognition.lang = 'hi-IN'
+
+      recognition.onstart = () => {
+        setIsRecording(true)
+        toast('Bolna shuru karein...', { icon: '🎙️' })
+      }
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript
+        setNaturalQuery(transcript)
+        setIsRecording(false)
+        toast.success(`Heard: "${transcript}"`)
+      }
+
+      recognition.onerror = (event) => {
+        setIsRecording(false)
+        toast.error(`Mic error: ${event.error}`)
+      }
+
+      recognition.onend = () => {
+        setIsRecording(false)
+      }
+
+      recognition.start()
+    } catch (err) {
+      setIsRecording(false)
+      toast.error('Mic access nahi mila.')
     }
   }
 
@@ -220,200 +432,580 @@ export default function Inventory() {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.15 }}
-      className="space-y-5"
+      className="space-y-6 max-w-7xl mx-auto pb-10"
     >
-      {/* Top Header & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Editorial Prologue Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b-2 border-[var(--border-color)] pb-4">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-[var(--text-main)] flex items-center gap-2">
-            <Boxes size={20} className="text-blue-500" />
-            Inventory & Stock Control
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="font-mono text-[10px] uppercase font-bold tracking-widest px-2.5 py-0.5 bg-[var(--bg-surface-elevated)] border border-[var(--border-color)]">
+              Warehouse Ledger · Chapter 02
+            </span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-extrabold uppercase tracking-tight text-[var(--text-main)] font-display">
+            Inventory Health & Movement
           </h1>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">
-            Real-time multi-category warehouse management and automated replenishment alerts.
+          <p className="text-xs text-[var(--text-muted)] mt-0.5 font-mono uppercase tracking-wide">
+            Live SKU availability, reorder thresholds, and warehouse valuation.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button onClick={handleExportCSV} className="btn-ghost text-xs cursor-pointer">
-            <Download size={14} />
-            Export CSV
-          </button>
+        <div className="flex items-center gap-2.5">
           <button
-            onClick={() => setShowAddProductModal(true)}
-            className="btn-ghost text-xs cursor-pointer"
+            onClick={handleExportCSV}
+            className="btn-secondary text-xs cursor-pointer font-bold font-mono uppercase tracking-wider"
+            title="Download CSV report"
           >
-            <Plus size={14} />
-            New Product
+            <Download size={13} className="stroke-[2.2]" />
+            <span>Export CSV</span>
           </button>
-          <button
-            onClick={() => {
-              if (products.length > 0) {
-                setSelectedProduct(products[0])
-                setShowAddStockModal(true)
-              }
-            }}
-            className="btn-accent text-xs cursor-pointer"
-          >
-            <ArrowUpRight size={14} />
-            Add Stock (Purchase)
-          </button>
+
+          {hasRole(['MANAGER', 'OWNER']) && (
+            <button
+              onClick={() => setShowAddProductModal(true)}
+              className="btn-accent text-xs cursor-pointer font-bold uppercase tracking-wider"
+            >
+              <Plus size={13} className="stroke-[2.5]" />
+              <span>Add New SKU</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Summary KPI Cards */}
+      {/* KPI Cards */}
       {summary && (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-          <div className="p-4 os-surface flex flex-col justify-between">
-            <span className="text-[11px] text-[var(--text-muted)] font-medium">Total Products</span>
-            <span className="text-xl font-bold font-mono text-[var(--text-main)] mt-1">{summary.total_products}</span>
-          </div>
-          <div className="p-4 os-surface flex flex-col justify-between">
-            <span className="text-[11px] text-[var(--text-muted)] font-medium">Inventory Value</span>
-            <span className="text-xl font-bold font-mono text-[var(--text-main)] mt-1">₹{summary.total_valuation.toLocaleString('en-IN')}</span>
-          </div>
-          <div className="p-4 os-surface border-l-4 border-l-red-500 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-red-500 font-semibold">Critical Stock</span>
-              <AlertOctagon size={14} className="text-red-500" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="card p-4 space-y-1 shadow-[3px_3px_0px_var(--border-color)]">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--text-dim)] font-bold">
+              Total Catalog SKUs
+            </span>
+            <div className="text-2xl font-extrabold text-[var(--text-main)] font-mono">
+              {summary.total_products}
             </div>
-            <span className="text-xl font-bold font-mono text-red-500 mt-1">{summary.critical_count}</span>
+            <p className="text-[11px] text-[var(--text-muted)] font-medium">Active registered products</p>
           </div>
-          <div className="p-4 os-surface border-l-4 border-l-amber-500 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-amber-500 font-semibold">Low Stock</span>
-              <AlertTriangle size={14} className="text-amber-500" />
+
+          <div className="card p-4 space-y-1 shadow-[3px_3px_0px_var(--border-color)]">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--text-dim)] font-bold">
+              Stock Valuation
+            </span>
+            <div className="text-2xl font-extrabold text-[var(--text-main)] font-mono bg-[var(--accent)] text-[var(--accent-ink)] px-1.5 py-0.5 inline-block rounded-[2px] border border-[var(--border-strong)]">
+              ₹{(summary.total_valuation || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </div>
-            <span className="text-xl font-bold font-mono text-amber-500 mt-1">{summary.low_count}</span>
+            <p className="text-[11px] text-[var(--text-muted)] font-medium">Retail inventory capital</p>
           </div>
-          <div className="p-4 os-surface border-l-4 border-l-emerald-500 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-emerald-500 font-semibold">Optimal Stock</span>
-              <CheckCircle2 size={14} className="text-emerald-500" />
+
+          <div className="card p-4 space-y-1 shadow-[3px_3px_0px_var(--border-color)]">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--text-dim)] font-bold">
+              Critical Depletion
+            </span>
+            <div className="text-2xl font-extrabold text-red-600 font-mono">
+              {summary.critical_count}
             </div>
-            <span className="text-xl font-bold font-mono text-emerald-500 mt-1">{summary.optimal_count}</span>
+            <p className="text-[11px] text-[var(--text-muted)] font-medium">Immediate restock required</p>
+          </div>
+
+          <div className="card p-4 space-y-1 shadow-[3px_3px_0px_var(--border-color)]">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--text-dim)] font-bold">
+              Healthy Stock
+            </span>
+            <div className="text-2xl font-extrabold text-emerald-600 font-mono">
+              {summary.optimal_count}
+            </div>
+            <p className="text-[11px] text-[var(--text-muted)] font-medium">Optimal supply balance</p>
           </div>
         </div>
       )}
 
-      {/* Filter & Search Bar */}
-      <div className="p-3 os-surface flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="relative w-full sm:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" size={15} />
-          <input
-            type="text"
-            placeholder="Filter by product name, SKU, or category..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-xs focus:outline-none focus:border-blue-500 text-[var(--text-main)]"
-          />
+      {/* Conversational Natural Language Inventory Adjustment Card */}
+
+      <div className="card p-4 space-y-3 bg-[var(--bg-surface)] border-2 border-[var(--border-color)] shadow-[4px_4px_0px_var(--border-color)]">
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-color)] pb-2.5">
+
+          <div className="flex items-center gap-2">
+
+            <div className="w-7 h-7 rounded-[3px] bg-[var(--accent)] text-[var(--accent-ink)] flex items-center justify-center font-bold shadow-[1px_1px_0px_var(--border-color)]">
+
+              <Sparkles size={16} />
+
+            </div>
+
+            <div>
+
+              <h2 className="text-sm font-bold uppercase tracking-tight text-[var(--text-main)] font-display">
+
+                Natural Language Stock Update
+
+              </h2>
+
+              <p className="text-[11px] text-[var(--text-muted)] font-mono">
+
+                Type or speak in Hindi, Hinglish, Marathi, or English (e.g. &ldquo;50 packet Maggi aayi, 20 bik gaye&rdquo;)
+
+              </p>
+
+            </div>
+
+          </div>
+
+          <div className="flex items-center gap-1.5 self-start sm:self-auto">
+
+            <span className="text-[10px] font-mono px-2 py-0.5 bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold uppercase rounded-[2px]">
+
+              Mandatory Confirmation
+
+            </span>
+
+          </div>
+
         </div>
 
-        {/* Status Filter Chips */}
-        <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto text-xs">
-          {['', 'CRITICAL', 'LOW', 'OPTIMAL', 'OVERSTOCK'].map((st) => (
+
+
+        {/* Input Form */}
+
+        <form onSubmit={handleNaturalSubmit} className="flex flex-col sm:flex-row gap-2">
+
+          <div className="relative flex-1 flex items-center bg-[var(--bg-surface-elevated)] border-2 border-[var(--border-color)] rounded-[3px] px-3 py-1.5 focus-within:border-[var(--accent)] shadow-[1px_1px_0px_var(--border-color)]">
+
+            <input
+
+              type="text"
+
+              value={naturalQuery}
+
+              onChange={(e) => setNaturalQuery(e.target.value)}
+
+              placeholder="e.g. 50 packet Maggi ka stock aaya hai aur 10 bik gaye..."
+
+              className="w-full bg-transparent text-xs text-[var(--text-main)] focus:outline-none placeholder:text-[var(--text-dim)] font-medium"
+
+            />
+
+            {naturalQuery && (
+
+              <button
+
+                type="button"
+
+                onClick={() => setNaturalQuery('')}
+
+                className="text-[var(--text-dim)] hover:text-[var(--text-main)] p-1"
+
+              >
+
+                <X size={13} />
+
+              </button>
+
+            )}
+
+          </div>
+
+
+
+          <div className="flex items-center gap-2">
+
             <button
-              key={st || 'ALL'}
-              onClick={() => setSelectedStatus(st)}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap cursor-pointer transition-all ${
-                selectedStatus === st
-                  ? 'bg-blue-600 text-white font-semibold'
-                  : 'bg-[var(--bg-surface-elevated)] text-[var(--text-muted)] border border-[var(--border-color)] hover:text-[var(--text-main)]'
+
+              type="button"
+
+              onClick={toggleRecording}
+
+              className={`btn-secondary text-xs cursor-pointer font-bold font-mono uppercase px-3 py-2 flex items-center gap-1.5 ${
+
+                isRecording ? 'bg-red-500 text-white animate-pulse border-red-700' : ''
+
               }`}
+
+              title="Speak stock update"
+
             >
-              {st || 'ALL STATUS'}
+
+              {isRecording ? <MicOff size={13} /> : <Mic size={13} />}
+
+              <span>{isRecording ? 'Listening...' : 'Voice'}</span>
+
             </button>
-          ))}
+
+
+
+            <button
+
+              type="submit"
+
+              disabled={naturalLoading || !naturalQuery.trim()}
+
+              className="btn-accent text-xs cursor-pointer font-bold uppercase tracking-wider px-4 py-2 shrink-0 disabled:opacity-50"
+
+            >
+
+              {naturalLoading ? 'Analyzing...' : 'Preview Update'}
+
+            </button>
+
+          </div>
+
+        </form>
+
+
+
+        {/* Pending Adjustment Confirmation Card */}
+
+        {pendingAdjustment && (
+
+          <motion.div
+
+            initial={{ opacity: 0, scale: 0.98 }}
+
+            animate={{ opacity: 1, scale: 1 }}
+
+            className="p-4 bg-amber-50 dark:bg-amber-950/30 border-2 border-amber-500 rounded-[3px] space-y-3 shadow-[2px_2px_0px_rgba(245,158,11,0.5)]"
+
+          >
+
+            <div className="flex items-center justify-between border-b border-amber-300 dark:border-amber-800 pb-2">
+
+              <div className="flex items-center gap-2">
+
+                <AlertCircle size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
+
+                <span className="text-xs font-bold font-mono uppercase tracking-wide text-amber-900 dark:text-amber-200">
+
+                  Confirmation Required Before Updating Stock
+
+                </span>
+
+              </div>
+
+              <span className="text-[10px] font-mono px-2 py-0.5 bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-100 font-bold uppercase rounded-[2px]">
+
+                Pending
+
+              </span>
+
+            </div>
+
+
+
+            {/* Structured Proposals List */}
+
+            {pendingAdjustment.proposals && pendingAdjustment.proposals.length > 0 ? (
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                {pendingAdjustment.proposals.map((prop, idx) => (
+
+                  <div
+
+                    key={idx}
+
+                    className="p-3 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[2px] space-y-2 shadow-[1px_1px_0px_var(--border-color)]"
+
+                  >
+
+                    <div className="flex items-center justify-between">
+
+                      <span className="text-xs font-extrabold text-[var(--text-main)] font-mono">
+
+                        {prop.product_name}
+
+                      </span>
+
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-muted)] font-bold">
+
+                        {prop.sku}
+
+                      </span>
+
+                    </div>
+
+
+
+                    <div className="text-[11px] space-y-1 font-mono text-[var(--text-main)]">
+
+                      {prop.movements && prop.movements.map((m, mIdx) => (
+
+                        <div key={mIdx} className="flex justify-between items-center text-[10px]">
+
+                          <span className="text-[var(--text-muted)]">
+
+                            {m.type === 'RESTOCK' ? '📦 Stock Received' :
+
+                             m.type === 'SALE' ? '🛒 Sold' :
+
+                             m.type === 'DAMAGED' ? '⚠️ Damaged/Expired' :
+
+                             m.type === 'RETURN_TO_SUPPLIER' ? '↩️ Supplier Return' :
+
+                             m.type === 'CUSTOMER_RETURN' ? '🔄 Customer Return' : '📝 Correction'}:
+
+                          </span>
+
+                          <span className={`font-bold ${
+
+                            m.quantity_delta > 0 ? 'text-emerald-600' : 'text-red-600'
+
+                          }`}>
+
+                            {m.quantity_delta > 0 ? `+${m.quantity_delta}` : m.quantity_delta} {prop.unit}
+
+                          </span>
+
+                        </div>
+
+                      ))}
+
+                    </div>
+
+
+
+                    <div className="pt-2 border-t border-[var(--border-color)] flex items-center justify-between text-xs font-mono font-bold">
+
+                      <span className="text-[var(--text-dim)] text-[10px]">
+
+                        Prev: {prop.previous_stock} {prop.unit}
+
+                      </span>
+
+                      <span className="text-emerald-600 font-extrabold">
+
+                        New: {prop.new_stock} {prop.unit}
+
+                      </span>
+
+                    </div>
+
+                  </div>
+
+                ))}
+
+              </div>
+
+            ) : (
+
+              <p className="text-xs font-mono text-[var(--text-main)] whitespace-pre-line">
+
+                {pendingAdjustment.response}
+
+              </p>
+
+            )}
+
+
+
+            {/* Action Buttons */}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+
+              <button
+
+                type="button"
+
+                onClick={handleCancelAdjustment}
+
+                className="btn-secondary text-xs cursor-pointer font-bold font-mono uppercase px-3 py-1.5 text-red-600 hover:bg-red-50"
+
+              >
+
+                Cancel
+
+              </button>
+
+              <button
+
+                type="button"
+
+                onClick={handleConfirmAdjustment}
+
+                disabled={confirmingAdjustment}
+
+                className="btn-accent text-xs cursor-pointer font-bold font-mono uppercase px-4 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-800 flex items-center gap-1.5"
+
+              >
+
+                <Check size={14} className="stroke-[3]" />
+
+                <span>{confirmingAdjustment ? 'Updating...' : 'Confirm & Update Stock'}</span>
+
+              </button>
+
+            </div>
+
+          </motion.div>
+
+        )}
+
+      </div>
+
+
+
+      {/* Filter and Search Bar */}
+      <div className="card p-3 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-[2px_2px_0px_var(--border-color)]">
+        {/* Search & Category Filter */}
+        <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+          <div className="w-full sm:w-72 flex items-center gap-2 bg-[var(--bg-surface-elevated)] border-2 border-[var(--border-color)] rounded-[3px] px-3 py-1.5 focus-within:border-[var(--accent)] shadow-[1px_1px_0px_var(--border-color)]">
+            <Search size={14} className="text-[var(--text-dim)] shrink-0 stroke-[2.2]" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search SKU, name, category..."
+              className="w-full bg-transparent border-none text-xs font-mono text-[var(--text-main)] placeholder-[var(--text-dim)] focus:outline-none"
+            />
+          </div>
+
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="w-full sm:w-auto text-xs font-mono bg-[var(--bg-surface-elevated)] border-2 border-[var(--border-color)] text-[var(--text-main)] rounded-[3px] px-2.5 py-1.5 focus:outline-none focus:border-[var(--accent)] cursor-pointer shadow-[1px_1px_0px_var(--border-color)]"
+            title="Filter by Category"
+          >
+            <option value="">All Categories ({availableCategories.length})</option>
+            {availableCategories.map((c) => (
+              <option key={c} value={c} className="bg-[var(--bg-surface)] text-[var(--text-main)]">
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Status filter tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+          {[
+            { label: 'All SKUs', val: '' },
+            { label: 'Critical', val: 'CRITICAL' },
+            { label: 'Low Stock', val: 'LOW' },
+            { label: 'Optimal', val: 'OPTIMAL' },
+            { label: 'Overstock', val: 'OVERSTOCK' },
+          ].map((st) => {
+            const isActive = selectedStatus === st.val
+            return (
+              <button
+                key={st.val}
+                onClick={() => setSelectedStatus(st.val)}
+                className={`px-2.5 py-1 rounded-[3px] text-xs font-mono font-bold uppercase tracking-wider whitespace-nowrap transition-all cursor-pointer ${
+                  isActive
+                    ? 'bg-[var(--accent)] text-[var(--accent-ink)] border border-[var(--border-strong)] shadow-[1px_1px_0px_var(--border-strong)]'
+                    : 'bg-[var(--bg-surface-elevated)] text-[var(--text-muted)] border border-[var(--border-color)] hover:border-[var(--border-strong)]'
+                }`}
+              >
+                {st.label}
+              </button>
+            )
+          })}
         </div>
       </div>
 
-      {/* Inventory Table */}
+      {/* Products Table */}
       <div className="os-surface overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-[var(--bg-surface-elevated)] border-b border-[var(--border-color)] text-[var(--text-muted)] font-mono uppercase tracking-wider text-[10px]">
+          <table className="w-full text-left text-xs divide-y divide-[var(--border-color)]">
+            <thead className="bg-[var(--bg-surface-elevated)] font-mono text-[10px] text-[var(--text-dim)] uppercase tracking-wider">
               <tr>
-                <th className="py-3 px-4">Product Details</th>
-                <th className="py-3 px-4">SKU</th>
-                <th className="py-3 px-4">Category</th>
-                <th className="py-3 px-4">Price</th>
-                <th className="py-3 px-4">Stock Level</th>
-                <th className="py-3 px-4">Reorder Pt</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-right">Actions</th>
+                <th className="px-4 py-3">Product Name & Category</th>
+                <th className="px-4 py-3">SKU</th>
+                <th className="px-4 py-3">Stock Level</th>
+                <th className="px-4 py-3">Price</th>
+                <th className="px-4 py-3">Reorder Point</th>
+                <th className="px-4 py-3">Health Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--border-color)]">
+            <tbody className="divide-y divide-[var(--border-subtle)] text-[var(--text-main)]">
               {loading ? (
                 <tr>
-                  <td colSpan="8" className="py-12 text-center text-[var(--text-muted)]">
-                    Loading inventory records...
+                  <td colSpan="7" className="px-4 py-12 text-center text-[var(--text-dim)]">
+                    Auditing live warehouse database...
                   </td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="py-12 text-center text-[var(--text-muted)]">
-                    No matching inventory products found.
+                  <td colSpan="7" className="px-4 py-12 text-center text-[var(--text-dim)]">
+                    No products match the selected criteria.
                   </td>
                 </tr>
               ) : (
                 filteredProducts.map((p) => {
-                  const isCritical = p.status === 'CRITICAL'
-                  const isLow = p.status === 'LOW'
+                  const stockRatio = Math.min(100, Math.round((p.current_stock / (p.reorder_point * 2 || 20)) * 100))
                   return (
-                    <tr
-                      key={p.id}
-                      className={`hover:bg-[var(--bg-surface-elevated)] transition-colors ${
-                        isCritical ? 'bg-red-500/5' : isLow ? 'bg-amber-500/5' : ''
-                      }`}
-                    >
-                      <td className="py-3 px-4 font-semibold text-[var(--text-main)]">
-                        {p.name}
-                        {isCritical && (
-                          <span className="ml-2 text-[10px] text-red-500 font-mono font-bold">● Urgent Restock</span>
-                        )}
+                    <tr key={p.id} className="hover:bg-[var(--bg-surface-elevated)] transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="font-semibold text-[var(--text-main)]">{p.name}</div>
+                        <div className="text-[10px] font-mono text-[var(--text-dim)]">{p.category || 'General'}</div>
                       </td>
-                      <td className="py-3 px-4 font-mono text-[var(--text-muted)]">{p.sku}</td>
-                      <td className="py-3 px-4 text-[var(--text-muted)]">{p.category}</td>
-                      <td className="py-3 px-4 font-mono font-semibold text-[var(--text-main)]">
-                        ₹{p.unit_price.toFixed(2)}
+                      <td className="px-4 py-3 font-mono text-[11px] text-[var(--text-muted)]">
+                        {p.sku}
                       </td>
-                      <td className="py-3 px-4 font-mono font-bold text-[var(--text-main)]">
-                        {p.current_stock} {p.unit}
+                      <td className="px-4 py-3 min-w-[140px]">
+                        <div className="flex items-center justify-between text-[11px] font-mono mb-1">
+                          <span className="font-bold">{p.current_stock} {p.unit || 'pcs'}</span>
+                          <span className="text-[10px] text-[var(--text-dim)]">Target: {p.reorder_point}</span>
+                        </div>
+                        <div className="w-full bg-[var(--bg-surface-elevated)] rounded-full h-1.5 overflow-hidden border border-[var(--border-subtle)]">
+                          <div
+                            className={`h-1.5 rounded-full ${
+                              p.status === 'CRITICAL'
+                                ? 'bg-red-500'
+                                : p.status === 'LOW'
+                                ? 'bg-amber-500'
+                                : 'bg-emerald-500'
+                            }`}
+                            style={{ width: `${stockRatio}%` }}
+                          />
+                        </div>
                       </td>
-                      <td className="py-3 px-4 font-mono text-[var(--text-muted)]">
-                        {p.reorder_point} {p.unit}
+                      <td className="px-4 py-3 font-mono font-bold text-xs">
+                        ₹{Number(p.unit_price).toFixed(2)}
                       </td>
-                      <td className="py-3 px-4">
-                        <span className={getBadgeStyle(p.status)}>{p.status}</span>
+                      <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">
+                        {p.reorder_point || 10} {p.unit || 'pcs'}
                       </td>
-                      <td className="py-3 px-4 text-right space-x-1">
-                        <button
-                          onClick={() => {
-                            setSelectedProduct(p)
-                            setShowAddStockModal(true)
-                          }}
-                          className="px-2 py-1 rounded bg-blue-600/10 text-blue-500 hover:bg-blue-600 hover:text-white transition-colors text-[11px] font-medium cursor-pointer"
-                        >
-                          + Restock
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedProduct(p)
-                            setEditProdForm({
-                              name: p.name,
-                              sku: p.sku,
-                              category: p.category,
-                              unit_price: p.unit_price,
-                              reorder_point: p.reorder_point,
-                              unit: p.unit,
-                            })
-                            setShowEditProductModal(true)
-                          }}
-                          className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)] transition-colors cursor-pointer"
-                        >
-                          <Edit2 size={13} />
-                        </button>
+                      <td className="px-4 py-3">
+                        {getStatusBadge(p.status)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => {
+                              setSelectedProduct(p)
+                              setShowAddStockModal(true)
+                            }}
+                            className="btn-accent text-[11px] py-1 px-2.5 cursor-pointer"
+                            title="Restock units"
+                          >
+                            <Plus size={12} />
+                            <span>Restock</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedProduct(p)
+                              setEditProdForm({
+                                name: p.name,
+                                sku: p.sku,
+                                category: p.category || '',
+                                unit_price: p.unit_price,
+                                reorder_point: p.reorder_point || 10,
+                                unit: p.unit || 'pcs',
+                              })
+                              setShowEditProductModal(true)
+                            }}
+                            className="p-1.5 rounded border border-[var(--border-color)] text-[var(--text-dim)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)] transition-colors cursor-pointer"
+                            title="Edit Product"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                          {hasRole(['MANAGER', 'OWNER']) && (
+                            <button
+                              onClick={() => handleDeleteProduct(p)}
+                              className="p-1.5 rounded border border-red-200 dark:border-red-900/60 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                              title="Delete Product"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )
@@ -424,69 +1016,43 @@ export default function Inventory() {
         </div>
       </div>
 
-      {/* ── MODAL: ADD STOCK (PURCHASE ORDER) ── */}
+      {/* ── MODAL: ADD STOCK ── */}
       {showAddStockModal && selectedProduct && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="os-surface max-w-md w-full p-6 relative">
-            <button
-              onClick={() => setShowAddStockModal(false)}
-              className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
-            >
-              <X size={18} />
-            </button>
+          <div className="os-surface max-w-sm w-full p-6 relative">
             <h2 className="text-sm font-bold text-[var(--text-main)] mb-1">
-              Add Stock / Purchase Replenishment
+              Add Stock Units
             </h2>
             <p className="text-xs text-[var(--text-muted)] mb-4">
-              Restock <span className="font-semibold text-[var(--text-main)]">{selectedProduct.name}</span> ({selectedProduct.sku})
+              Replenishing: <span className="font-semibold text-[var(--text-main)]">{selectedProduct.name}</span>
             </p>
 
-            <form onSubmit={handleAddStock} className="space-y-4">
+            <form onSubmit={handleAddStock} className="space-y-3 text-xs">
               <div>
                 <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">
-                  Select Product:
-                </label>
-                <select
-                  value={selectedProduct.id}
-                  onChange={(e) => {
-                    const prod = products.find((p) => p.id === parseInt(e.target.value))
-                    if (prod) setSelectedProduct(prod)
-                  }}
-                  className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-xs text-[var(--text-main)] focus:outline-none focus:border-blue-500"
-                >
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} (Current: {p.current_stock} {p.unit})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">
-                  Quantity Received ({selectedProduct.unit}):
+                  Quantity to Add
                 </label>
                 <input
                   type="number"
                   min="1"
                   required
-                  placeholder="e.g. 50"
                   value={addStockQty}
                   onChange={(e) => setAddStockQty(e.target.value)}
-                  className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-xs text-[var(--text-main)] focus:outline-none focus:border-blue-500 font-mono"
+                  placeholder="e.g. 50"
+                  className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] font-mono focus:outline-none focus:border-[var(--accent)]"
                 />
               </div>
 
               <div>
                 <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">
-                  Supplier / PO Notes:
+                  Restock Reference / Note
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Supplier Invoice #PO-9921"
                   value={addStockNotes}
                   onChange={(e) => setAddStockNotes(e.target.value)}
-                  className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-xs text-[var(--text-main)] focus:outline-none focus:border-blue-500"
+                  placeholder="e.g. PO #1042 or Vendor Delivery"
+                  className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)]"
                 />
               </div>
 
@@ -503,7 +1069,7 @@ export default function Inventory() {
                   disabled={submitting}
                   className="btn-accent text-xs cursor-pointer"
                 >
-                  {submitting ? 'Updating...' : 'Confirm Stock Addition'}
+                  {submitting ? 'Updating...' : 'Confirm Stock'}
                 </button>
               </div>
             </form>
@@ -511,108 +1077,156 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* ── MODAL: CREATE PRODUCT ── */}
+      {/* ── MODAL: ADD PRODUCT ── */}
       {showAddProductModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="os-surface max-w-lg w-full p-6 relative">
-            <button
-              onClick={() => setShowAddProductModal(false)}
-              className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
-            >
-              <X size={18} />
-            </button>
-            <h2 className="text-sm font-bold text-[var(--text-main)] mb-1">Create Catalog Product</h2>
-            <p className="text-xs text-[var(--text-muted)] mb-4">Add a new SKU to inventory and POS catalog.</p>
+          <div className="os-surface max-w-md w-full p-6 relative">
+            <h2 className="text-sm font-bold text-[var(--text-main)] mb-1">
+              Add New Inventory SKU
+            </h2>
+            <p className="text-xs text-[var(--text-muted)] mb-4">
+              Register a product in the warehouse catalog.
+            </p>
 
-            <form onSubmit={handleCreateProduct} className="grid grid-cols-2 gap-3 text-xs">
-              <div className="col-span-2">
-                <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">Product Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Haldiram Moong Dal 200g"
-                  value={newProdForm.name}
-                  onChange={(e) => setNewProdForm({ ...newProdForm, name: e.target.value })}
-                  className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] focus:outline-none focus:border-blue-500 text-[var(--text-main)]"
-                />
+            <form onSubmit={handleCreateProduct} className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">
+                    Product Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newProdForm.name}
+                    onChange={(e) => setNewProdForm({ ...newProdForm, name: e.target.value })}
+                    placeholder="e.g. Basmati Rice 5kg"
+                    className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">
+                    SKU Code *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newProdForm.sku}
+                    onChange={(e) => setNewProdForm({ ...newProdForm, sku: e.target.value })}
+                    placeholder="e.g. GROC-RICE-001"
+                    className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] font-mono uppercase focus:outline-none focus:border-[var(--accent)]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">
+                    Category *
+                  </label>
+                  <select
+                    value={availableCategories.includes(newProdForm.category) ? newProdForm.category : 'Custom'}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setNewProdForm({ ...newProdForm, category: val === 'Custom' ? '' : val })
+                    }}
+                    className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] cursor-pointer text-sm"
+                  >
+                    {availableCategories.map((cat) => (
+                      <option key={cat} value={cat} className="bg-[var(--bg-surface)] text-[var(--text-main)]">
+                        {cat}
+                      </option>
+                    ))}
+                    <option value="Custom" className="bg-[var(--bg-surface)] text-[var(--text-main)]">
+                      + Other / Custom Category...
+                    </option>
+                  </select>
+                  {(!availableCategories.includes(newProdForm.category) || newProdForm.category === 'Custom') && (
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="Type custom category name..."
+                      value={newProdForm.category === 'Custom' ? '' : newProdForm.category}
+                      onChange={(e) => setNewProdForm({ ...newProdForm, category: e.target.value })}
+                      className="w-full mt-1.5 p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--accent)] text-[var(--text-main)] text-xs focus:outline-none"
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">
+                    Unit Price (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={newProdForm.unit_price}
+                    onChange={(e) => setNewProdForm({ ...newProdForm, unit_price: e.target.value })}
+                    placeholder="250.00"
+                    className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] font-mono focus:outline-none focus:border-[var(--accent)]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">
+                    Initial Stock
+                  </label>
+                  <input
+                    type="number"
+                    value={newProdForm.current_stock}
+                    onChange={(e) => setNewProdForm({ ...newProdForm, current_stock: e.target.value })}
+                    placeholder="100"
+                    className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] font-mono focus:outline-none focus:border-[var(--accent)]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">
+                    Reorder Point
+                  </label>
+                  <input
+                    type="number"
+                    value={newProdForm.reorder_point}
+                    onChange={(e) => setNewProdForm({ ...newProdForm, reorder_point: e.target.value })}
+                    placeholder="15"
+                    className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] font-mono focus:outline-none focus:border-[var(--accent)]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">
+                    Unit of Measurement
+                  </label>
+                  <select
+                    value={STANDARD_UNITS.includes(newProdForm.unit) ? newProdForm.unit : 'Custom'}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setNewProdForm({ ...newProdForm, unit: val === 'Custom' ? '' : val })
+                    }}
+                    className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] cursor-pointer text-sm"
+                  >
+                    {STANDARD_UNITS.map((u) => (
+                      <option key={u} value={u} className="bg-[var(--bg-surface)] text-[var(--text-main)]">
+                        {u}
+                      </option>
+                    ))}
+                    <option value="Custom" className="bg-[var(--bg-surface)] text-[var(--text-main)]">
+                      + Custom Unit...
+                    </option>
+                  </select>
+                  {(!STANDARD_UNITS.includes(newProdForm.unit) || newProdForm.unit === 'Custom') && (
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="e.g. bundle / strip"
+                      value={newProdForm.unit === 'Custom' ? '' : newProdForm.unit}
+                      onChange={(e) => setNewProdForm({ ...newProdForm, unit: e.target.value })}
+                      className="w-full mt-1.5 p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--accent)] text-[var(--text-main)] text-xs focus:outline-none"
+                    />
+                  )}
+                </div>
               </div>
 
-              <div>
-                <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">SKU Code *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. SNACK-009"
-                  value={newProdForm.sku}
-                  onChange={(e) => setNewProdForm({ ...newProdForm, sku: e.target.value })}
-                  className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] font-mono focus:outline-none focus:border-blue-500 text-[var(--text-main)]"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">Category *</label>
-                <select
-                  value={newProdForm.category}
-                  onChange={(e) => setNewProdForm({ ...newProdForm, category: e.target.value })}
-                  className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] focus:outline-none focus:border-blue-500 text-[var(--text-main)]"
-                >
-                  <option value="Grocery">Grocery</option>
-                  <option value="Snacks">Snacks</option>
-                  <option value="Personal Care">Personal Care</option>
-                  <option value="Dairy">Dairy</option>
-                  <option value="Household">Household</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">Selling Price (₹) *</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  placeholder="e.g. 65.00"
-                  value={newProdForm.unit_price}
-                  onChange={(e) => setNewProdForm({ ...newProdForm, unit_price: e.target.value })}
-                  className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] font-mono focus:outline-none focus:border-blue-500 text-[var(--text-main)]"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">Unit of Measure</label>
-                <input
-                  type="text"
-                  placeholder="pcs, pack, kg, ltr"
-                  value={newProdForm.unit}
-                  onChange={(e) => setNewProdForm({ ...newProdForm, unit: e.target.value })}
-                  className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] focus:outline-none focus:border-blue-500 text-[var(--text-main)]"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">Initial Opening Stock</label>
-                <input
-                  type="number"
-                  min="0"
-                  placeholder="0"
-                  value={newProdForm.current_stock}
-                  onChange={(e) => setNewProdForm({ ...newProdForm, current_stock: e.target.value })}
-                  className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] font-mono focus:outline-none focus:border-blue-500 text-[var(--text-main)]"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">Reorder Point Threshold</label>
-                <input
-                  type="number"
-                  min="1"
-                  placeholder="10"
-                  value={newProdForm.reorder_point}
-                  onChange={(e) => setNewProdForm({ ...newProdForm, reorder_point: e.target.value })}
-                  className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] font-mono focus:outline-none focus:border-blue-500 text-[var(--text-main)]"
-                />
-              </div>
-
-              <div className="col-span-2 pt-3 flex justify-end gap-2">
+              <div className="pt-3 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setShowAddProductModal(false)}
@@ -625,7 +1239,7 @@ export default function Inventory() {
                   disabled={submitting}
                   className="btn-accent text-xs cursor-pointer"
                 >
-                  {submitting ? 'Creating...' : 'Create Product'}
+                  {submitting ? 'Creating...' : 'Register SKU'}
                 </button>
               </div>
             </form>
@@ -637,63 +1251,149 @@ export default function Inventory() {
       {showEditProductModal && selectedProduct && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="os-surface max-w-md w-full p-6 relative">
-            <button
-              onClick={() => setShowEditProductModal(false)}
-              className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
-            >
-              <X size={18} />
-            </button>
-            <h2 className="text-sm font-bold text-[var(--text-main)] mb-1">Edit Product Details</h2>
-            <p className="text-xs text-[var(--text-muted)] mb-4">{selectedProduct.name}</p>
+            <h2 className="text-sm font-bold text-[var(--text-main)] mb-1">
+              Edit Product Details
+            </h2>
+            <p className="text-xs text-[var(--text-muted)] mb-4">
+              Updating master information for SKU: <span className="font-mono">{selectedProduct.sku}</span>
+            </p>
 
             <form onSubmit={handleUpdateProduct} className="space-y-3 text-xs">
               <div>
-                <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">Product Name</label>
+                <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">
+                  Product Name
+                </label>
                 <input
                   type="text"
+                  required
                   value={editProdForm.name}
                   onChange={(e) => setEditProdForm({ ...editProdForm, name: e.target.value })}
-                  className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] focus:outline-none focus:border-blue-500 text-[var(--text-main)]"
+                  className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)]"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">Selling Price (₹)</label>
+                  <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">
+                    Category
+                  </label>
+                  <select
+                    value={availableCategories.includes(editProdForm.category) ? editProdForm.category : 'Custom'}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setEditProdForm({ ...editProdForm, category: val === 'Custom' ? '' : val })
+                    }}
+                    className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] cursor-pointer text-sm"
+                  >
+                    {availableCategories.map((cat) => (
+                      <option key={cat} value={cat} className="bg-[var(--bg-surface)] text-[var(--text-main)]">
+                        {cat}
+                      </option>
+                    ))}
+                    <option value="Custom" className="bg-[var(--bg-surface)] text-[var(--text-main)]">
+                      + Other / Custom Category...
+                    </option>
+                  </select>
+                  {(!availableCategories.includes(editProdForm.category) || editProdForm.category === 'Custom') && (
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="Type custom category name..."
+                      value={editProdForm.category === 'Custom' ? '' : editProdForm.category}
+                      onChange={(e) => setEditProdForm({ ...editProdForm, category: e.target.value })}
+                      className="w-full mt-1.5 p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--accent)] text-[var(--text-main)] text-xs focus:outline-none"
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">
+                    Unit Price (₹)
+                  </label>
                   <input
                     type="number"
                     step="0.01"
+                    required
                     value={editProdForm.unit_price}
                     onChange={(e) => setEditProdForm({ ...editProdForm, unit_price: e.target.value })}
-                    className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] font-mono focus:outline-none focus:border-blue-500 text-[var(--text-main)]"
+                    className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] font-mono focus:outline-none focus:border-[var(--accent)]"
                   />
                 </div>
+
                 <div>
-                  <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">Reorder Threshold</label>
+                  <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">
+                    Reorder Point
+                  </label>
                   <input
                     type="number"
                     value={editProdForm.reorder_point}
                     onChange={(e) => setEditProdForm({ ...editProdForm, reorder_point: e.target.value })}
-                    className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] font-mono focus:outline-none focus:border-blue-500 text-[var(--text-main)]"
+                    className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] font-mono focus:outline-none focus:border-[var(--accent)]"
                   />
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-[var(--text-muted)] font-medium block mb-1">
+                    Unit
+                  </label>
+                  <select
+                    value={STANDARD_UNITS.includes(editProdForm.unit) ? editProdForm.unit : 'Custom'}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setEditProdForm({ ...editProdForm, unit: val === 'Custom' ? '' : val })
+                    }}
+                    className="w-full p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] cursor-pointer text-sm"
+                  >
+                    {STANDARD_UNITS.map((u) => (
+                      <option key={u} value={u} className="bg-[var(--bg-surface)] text-[var(--text-main)]">
+                        {u}
+                      </option>
+                    ))}
+                    <option value="Custom" className="bg-[var(--bg-surface)] text-[var(--text-main)]">
+                      + Custom Unit...
+                    </option>
+                  </select>
+                  {(!STANDARD_UNITS.includes(editProdForm.unit) || editProdForm.unit === 'Custom') && (
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="e.g. bundle / strip"
+                      value={editProdForm.unit === 'Custom' ? '' : editProdForm.unit}
+                      onChange={(e) => setEditProdForm({ ...editProdForm, unit: e.target.value })}
+                      className="w-full mt-1.5 p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--accent)] text-[var(--text-main)] text-xs focus:outline-none"
+                    />
+                  )}
                 </div>
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowEditProductModal(false)}
-                  className="btn-ghost text-xs cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="btn-accent text-xs cursor-pointer"
-                >
-                  {submitting ? 'Saving...' : 'Save Changes'}
-                </button>
+              <div className="pt-3 flex items-center justify-between gap-2 border-t border-[var(--border-color)] mt-2">
+                {hasRole(['MANAGER', 'OWNER']) ? (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteProduct(selectedProduct)}
+                    className="btn-secondary text-xs cursor-pointer font-bold text-red-600 hover:bg-red-50 border-red-300 dark:border-red-800 flex items-center gap-1.5"
+                    title="Delete SKU from catalog"
+                  >
+                    <Trash2 size={13} />
+                    <span>Delete SKU</span>
+                  </button>
+                ) : <div />}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditProductModal(false)}
+                    className="btn-ghost text-xs cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="btn-accent text-xs cursor-pointer"
+                  >
+                    {submitting ? 'Saving...' : 'Update Details'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

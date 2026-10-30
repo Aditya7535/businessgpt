@@ -8,6 +8,11 @@ export default {
   theme: {
     extend: {
       colors: {
+        ink: '#111111',
+        paper: '#F5F4EF',
+        'neo-accent': '#D7FF38',
+        'neo-border': '#242424',
+        'neo-muted': '#777777',
         primary: {
           50: '#eff6ff',
           100: '#dbeafe',
@@ -22,7 +27,14 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Space Grotesk', 'Arial', 'Noto Sans Devanagari', 'sans-serif'],
+        display: ['Space Grotesk', 'Arial', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
+        editorial: ['Space Grotesk', 'Arial', 'sans-serif'],
+      },
+      borderRadius: {
+        card: '4px',
+        btn: '3px',
       },
     },
   },

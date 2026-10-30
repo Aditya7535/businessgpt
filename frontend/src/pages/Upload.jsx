@@ -1,7 +1,7 @@
-import { useState, useCallback } from 'react'
+import React, { useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { useDropzone } from 'react-dropzone'
-import { Upload, FileText, CheckCircle, XCircle, Loader2, Table } from 'lucide-react'
+import { Upload, FileText, CheckCircle2, XCircle, Loader2, Table, Database, ArrowRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { uploadFile } from '../services/api'
 
@@ -9,15 +9,25 @@ function DataPreview({ data }) {
   if (!data?.length) return null
   const cols = Object.keys(data[0])
   return (
-    <div className="overflow-x-auto rounded-xl border border-gray-100">
-      <table className="text-xs w-full">
-        <thead className="bg-gray-50">
-          <tr>{cols.map(c => <th key={c} className="px-3 py-2 text-left text-gray-600 font-semibold whitespace-nowrap">{c}</th>)}</tr>
+    <div className="overflow-x-auto rounded-xl border border-[var(--border-color)]">
+      <table className="text-xs w-full divide-y divide-[var(--border-color)]">
+        <thead className="bg-[var(--bg-surface-elevated)] font-mono text-[10px] uppercase text-[var(--text-dim)]">
+          <tr>
+            {cols.map((c) => (
+              <th key={c} className="px-3.5 py-2.5 text-left font-semibold whitespace-nowrap">
+                {c}
+              </th>
+            ))}
+          </tr>
         </thead>
-        <tbody>
-          {data.slice(0, 5).map((row, i) => (
-            <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-              {cols.map(c => <td key={c} className="px-3 py-2 text-gray-700 whitespace-nowrap max-w-[120px] truncate">{String(row[c] ?? '')}</td>)}
+        <tbody className="divide-y divide-[var(--border-subtle)] text-[var(--text-main)]">
+          {data.slice(0, 6).map((row, i) => (
+            <tr key={i} className="hover:bg-[var(--bg-surface-elevated)] transition-colors">
+              {cols.map((c) => (
+                <td key={c} className="px-3.5 py-2 whitespace-nowrap max-w-[140px] truncate text-[var(--text-muted)] font-mono">
+                  {String(row[c] ?? '')}
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>
@@ -34,12 +44,22 @@ export default function UploadPage() {
   const [errorMessage, setErrorMessage] = useState('')
 
   const onDrop = useCallback((accepted) => {
-    if (accepted[0]) { setFile(accepted[0]); setStatus('idle'); setResult(null); setProgress(0); setErrorMessage('') }
+    if (accepted[0]) {
+      setFile(accepted[0])
+      setStatus('idle')
+      setResult(null)
+      setProgress(0)
+      setErrorMessage('')
+    }
   }, [])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'text/csv': ['.csv'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'], 'application/vnd.ms-excel': ['.xls'] },
+    accept: {
+      'text/csv': ['.csv'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-excel': ['.xls'],
+    },
     maxFiles: 1,
   })
 
@@ -52,10 +72,10 @@ export default function UploadPage() {
       const res = await uploadFile(file, setProgress)
       setResult(res.data)
       setStatus('success')
-      toast.success(`${res.data.row_count} rows uploaded successfully!`)
+      toast.success(`${res.data.row_count || 'Ledger'} records ingested into database!`)
     } catch (err) {
       setStatus('error')
-      const msg = err.response?.data?.detail || err.message || 'Upload failed. Check if backend is running.'
+      const msg = err.response?.data?.detail || err.message || 'Upload failed. Check if backend database is running.'
       setErrorMessage(msg)
       toast.error(msg)
     }
@@ -67,90 +87,139 @@ export default function UploadPage() {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.15 }}
-      className="max-w-3xl mx-auto space-y-6"
+      className="max-w-3xl mx-auto space-y-6 pb-10"
     >
-      <div>
-        <h2 className="text-xl font-bold text-gray-900">Upload Business Data</h2>
-        <p className="text-sm text-gray-500 mt-1">Upload CSV or Excel file — data will auto-embed into AI knowledge base</p>
+      {/* Editorial Prologue Header */}
+      <div className="border-b-2 border-[var(--border-color)] pb-4">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="font-mono text-[10px] uppercase font-bold tracking-widest px-2.5 py-0.5 bg-[var(--bg-surface-elevated)] border border-[var(--border-color)]">
+            Ingestion Ledger · Records
+          </span>
+        </div>
+        <h1 className="text-xl sm:text-2xl font-extrabold uppercase tracking-tight text-[var(--text-main)] font-display">
+          Upload Sales & Inventory Ledgers
+        </h1>
+        <p className="text-xs text-[var(--text-muted)] mt-0.5 font-mono uppercase tracking-wide">
+          Import CSV or Excel spreadsheets into your store database.
+        </p>
       </div>
 
-      {/* Dropzone */}
-      <div {...getRootProps()} className={`cursor-pointer border-2 border-dashed rounded-2xl p-10 text-center transition-all duration-200
-        ${isDragActive ? 'border-primary-400 bg-primary-50' : 'border-gray-200 bg-white hover:border-primary-300 hover:bg-gray-50'}`}>
+      {/* Drag & Drop Zone */}
+      <div
+        {...getRootProps()}
+        className={`cursor-pointer border-2 border-dashed rounded-2xl p-10 text-center transition-all duration-200 os-surface ${
+          isDragActive
+            ? 'border-[var(--accent)] bg-[var(--accent-subtle)]'
+            : 'border-[var(--border-color)] hover:border-[var(--border-strong)]'
+        }`}
+      >
         <input {...getInputProps()} />
         <div className="flex flex-col items-center gap-3">
-          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${isDragActive ? 'bg-primary-100' : 'bg-gray-100'}`}>
-            <Upload className={`w-7 h-7 ${isDragActive ? 'text-primary-600' : 'text-gray-400'}`} />
+          <div
+            className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-transform ${
+              isDragActive
+                ? 'bg-[var(--accent)] text-[var(--accent-ink)] border border-[var(--border-strong)] scale-110'
+                : 'bg-[var(--bg-surface-elevated)] text-[var(--text-main)] border border-[var(--border-color)]'
+            }`}
+          >
+            <Upload className="w-6 h-6" />
           </div>
+
           {file ? (
-            <div className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-primary-600" />
-              <span className="font-semibold text-gray-800">{file.name}</span>
-              <span className="text-xs text-gray-400">({(file.size / 1024).toFixed(1)} KB)</span>
+            <div className="flex items-center gap-2 bg-[var(--bg-surface-elevated)] px-4 py-2 rounded-lg border border-[var(--border-color)]">
+              <FileText className="w-4 h-4 text-[var(--accent)]" />
+              <span className="font-semibold text-xs text-[var(--text-main)]">{file.name}</span>
+              <span className="text-[10px] font-mono text-[var(--text-dim)]">
+                ({(file.size / 1024).toFixed(1)} KB)
+              </span>
             </div>
           ) : (
             <>
-              <p className="font-semibold text-gray-700">{isDragActive ? 'Drop it here!' : 'Drag & drop your file here'}</p>
-              <p className="text-sm text-gray-400">or click to browse</p>
-              <p className="text-xs text-gray-300">Supports: .csv, .xlsx, .xls</p>
+              <p className="font-semibold text-sm text-[var(--text-main)]">
+                {isDragActive ? 'Drop sales spreadsheet here' : 'Drag & drop transaction ledger here'}
+              </p>
+              <p className="text-xs text-[var(--text-muted)]">or click to browse your local computer</p>
+              <p className="text-[10px] font-mono text-[var(--text-dim)]">Supports .csv, .xlsx, .xls</p>
             </>
           )}
         </div>
       </div>
 
-      {/* Progress bar */}
+      {/* Upload Progress Bar */}
       {status === 'uploading' && (
-        <div className="card space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="flex items-center gap-2 text-gray-700 font-medium"><Loader2 className="w-4 h-4 animate-spin text-primary-600" />Uploading & embedding...</span>
-            <span className="text-primary-600 font-bold">{progress}%</span>
+        <div className="os-surface p-4 space-y-2">
+          <div className="flex items-center justify-between text-xs font-mono">
+            <span className="text-[var(--text-muted)]">Importing and analyzing records...</span>
+            <span className="font-bold text-[var(--accent)]">{progress}%</span>
           </div>
-          <div className="bg-gray-100 rounded-full h-2">
-            <div className="bg-primary-600 h-2 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
+          <div className="w-full bg-[var(--bg-surface-elevated)] rounded-full h-2 overflow-hidden">
+            <div
+              className="bg-[var(--accent)] h-2 rounded-full transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
           </div>
         </div>
       )}
 
-      {/* Upload button */}
+      {/* Upload Trigger Button */}
       {file && status !== 'uploading' && status !== 'success' && (
-        <button onClick={handleUpload} className="btn-primary w-full py-3 text-base flex items-center justify-center gap-2">
-          <Upload className="w-5 h-5" />
-          Upload {file.name}
-        </button>
+        <div className="flex justify-end">
+          <button
+            onClick={handleUpload}
+            className="btn-accent text-xs font-semibold py-2.5 px-6 cursor-pointer"
+          >
+            <span>Process & Ingest File</span>
+            <ArrowRight size={14} />
+          </button>
+        </div>
       )}
 
-      {/* Success result */}
+      {/* Success State & Preview */}
       {status === 'success' && result && (
-        <div className="card border-emerald-100 bg-emerald-50 space-y-4">
-          <div className="flex items-center gap-3">
-            <CheckCircle className="w-6 h-6 text-emerald-500 flex-shrink-0" />
+        <div className="os-surface p-5 space-y-4">
+          <div className="flex items-center gap-3 text-emerald-500">
+            <CheckCircle2 className="w-6 h-6 shrink-0" />
             <div>
-              <p className="font-semibold text-emerald-800">Upload Successful!</p>
-              <p className="text-sm text-emerald-700">{result.row_count} rows · {result.columns?.length} columns detected</p>
+              <h4 className="font-bold text-sm text-[var(--text-main)]">
+                Ledger Ingested Successfully
+              </h4>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                {result.row_count || 'All'} rows processed and updated in your store database.
+              </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {result.columns?.map(col => <span key={col} className="badge badge-green text-xs">{col}</span>)}
-          </div>
-          {result.data?.length > 0 && (
-            <>
-              <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                <Table className="w-4 h-4" />Data Preview (first 5 rows)
-              </div>
-              <DataPreview data={result.data} />
-            </>
+
+          {result.preview && result.preview.length > 0 && (
+            <div className="space-y-2 pt-2 border-t border-[var(--border-subtle)]">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-dim)] font-semibold block">
+                Ingested Table Sample Preview
+              </span>
+              <DataPreview data={result.preview} />
+            </div>
           )}
-          <button onClick={() => { setFile(null); setStatus('idle'); setResult(null) }}
-            className="btn-secondary w-full text-sm">Upload Another File</button>
+
+          <div className="pt-2 flex justify-end">
+            <button
+              onClick={() => {
+                setFile(null)
+                setStatus('idle')
+                setResult(null)
+              }}
+              className="btn-ghost text-xs cursor-pointer"
+            >
+              Upload Another Ledger
+            </button>
+          </div>
         </div>
       )}
 
+      {/* Error state */}
       {status === 'error' && (
-        <div className="card border-red-100 bg-red-50 flex items-center gap-3">
-          <XCircle className="w-6 h-6 text-red-500 flex-shrink-0" />
-          <div>
-            <p className="font-semibold text-red-800">Upload Failed</p>
-            <p className="text-sm text-red-600">{errorMessage || 'Please check file format and try again.'}</p>
+        <div className="os-surface p-4 border border-red-500/30 bg-red-500/10 flex items-start gap-3">
+          <XCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+          <div className="text-xs">
+            <span className="font-bold text-red-500">Ingestion Failure</span>
+            <p className="text-[var(--text-muted)] mt-0.5">{errorMessage}</p>
           </div>
         </div>
       )}

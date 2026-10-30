@@ -13,11 +13,23 @@ def format_for_whatsapp(text: str) -> str:
     """
     Converts a typical AI text response into WhatsApp-friendly plain text.
     - Strips HTML
+    - Strips raw SQL queries, technical execution notes, and internal system paths
     - Converts **bold** → *bold* (WhatsApp markdown)
     - Converts markdown headers (##) → plain text with emoji
     - Preserves emojis
     """
     text = clean_html(text)
+
+    # Strip SQL code blocks ```sql ... ```
+    text = re.sub(r'```(?:sql)?\s*[\s\S]*?```', '', text, flags=re.IGNORECASE)
+
+    # Strip raw SQL statements (e.g. `SELECT ... FROM ...`)
+    text = re.sub(r'`\s*SELECT\b[\s\S]*?`', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'(?:Query|SQL):\s*`?[^`\n]+`?', '', text, flags=re.IGNORECASE)
+
+    # Strip internal technical source mentions
+    text = re.sub(r'\*?Data Source:\s*[^\n]+', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\[Text-to-SQL\][^\n]+', '', text)
 
     # **bold** → *bold*
     text = re.sub(r'\*\*(.+?)\*\*', r'*\1*', text)

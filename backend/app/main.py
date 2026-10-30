@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import engine, Base
 from app.api import upload, chat, auth, pos
+from app.api import customers as customers_api
 from app.api import inventory as inventory_api
 from app.api import analytics as analytics_api
 from app.api import settings as settings_api
@@ -15,6 +16,7 @@ from app.modules.whatsapp.router import router as whatsapp_router
 from app.api.voice import router as voice_router
 from app.modules.alerts.scheduler import start_scheduler, stop_scheduler
 from app.core.seed import seed_database
+from app.core.migrations import run_migrations
 
 
 # Import all models so they are registered with Base
@@ -51,6 +53,7 @@ async def startup_event():
     for attempt in range(1, 6):
         try:
             seed_database()
+            run_migrations()
             logger.info("Database tables and seed data initialized successfully.")
             break
         except Exception as e:
@@ -72,6 +75,7 @@ async def shutdown_event():
 # ── Include Routers ──
 app.include_router(auth.router, prefix="/api", tags=["auth"])
 app.include_router(pos.router, prefix="/api", tags=["pos"])
+app.include_router(customers_api.router, prefix="/api", tags=["customers"])
 app.include_router(inventory_api.router, prefix="/api", tags=["inventory"])
 app.include_router(analytics_api.router, prefix="/api", tags=["analytics"])
 app.include_router(settings_api.router, prefix="/api", tags=["settings"])

@@ -8,6 +8,8 @@ from app.models.dataset import Dataset
 from app.models.whatsapp import WhatsAppSession, WhatsAppRegistration, WhatsAppMessageLog
 from app.models.store_setting import StoreSetting
 from app.models.chat_message import ChatMessage
+from app.models.customer import Customer, CustomerSetting
+from app.models.inventory_adjustment import PendingInventoryAdjustment
 
 __all__ = [
     "User",
@@ -22,5 +24,8 @@ __all__ = [
     "WhatsAppRegistration",
     "WhatsAppMessageLog",
     "StoreSetting",
-    "ChatMessage"
+    "ChatMessage",
+    "Customer",
+    "CustomerSetting",
+    "PendingInventoryAdjustment",
 ]

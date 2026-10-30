@@ -9,6 +9,7 @@ class Bill(Base):
     id = Column(Integer, primary_key=True, index=True)
     bill_number = Column(String(50), unique=True, nullable=False, index=True)
     employee_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True)
     total_amount = Column(Float, nullable=False)
     tax_amount = Column(Float, default=0.0)
     payment_method = Column(String(20), nullable=False)  # Cash, UPI, Card
@@ -16,6 +17,7 @@ class Bill(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     items = relationship("BillItem", back_populates="bill", cascade="all, delete-orphan")
+    customer = relationship("Customer", backref="bills", foreign_keys=[customer_id])
 
 
 class BillItem(Base):

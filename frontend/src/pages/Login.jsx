@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
-import { Store, ShieldCheck, UserCheck, KeyRound, ArrowRight, Delete, Check } from 'lucide-react'
+import { Store, ShieldCheck, UserCheck, KeyRound, ArrowRight, Delete, Check, Sparkles } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function Login() {
@@ -19,7 +19,7 @@ export default function Login() {
       if (user?.role === 'EMPLOYEE') {
         navigate('/pos')
       } else {
-        navigate('/pos')
+        navigate('/dashboard')
       }
     }
   }, [isAuthenticated, user, navigate])
@@ -30,8 +30,8 @@ export default function Login() {
       title: 'Store Owner',
       desc: 'Full BI Access, AI Chat, Financial Forecasts, Settings',
       defaultPin: '1111',
-      badge: 'Full Access',
-      color: 'from-blue-500/20 to-indigo-500/20 border-blue-500/40 text-blue-400'
+      badge: 'Owner Access',
+      color: 'border-blue-500/40 text-blue-500'
     },
     {
       id: 'MANAGER',
@@ -39,7 +39,7 @@ export default function Login() {
       desc: 'Inventory Replenishment, Stock Audits, Operational Logs',
       defaultPin: '2222',
       badge: 'Operations',
-      color: 'from-amber-500/20 to-orange-500/20 border-amber-500/40 text-amber-400'
+      color: 'border-amber-500/40 text-amber-500'
     },
     {
       id: 'EMPLOYEE',
@@ -47,7 +47,7 @@ export default function Login() {
       desc: 'High-speed POS Billing, Instant Checkout, Receipt Print',
       defaultPin: '3333',
       badge: 'Counter POS',
-      color: 'from-emerald-500/20 to-teal-500/20 border-emerald-500/40 text-emerald-400'
+      color: 'border-emerald-500/40 text-emerald-500'
     }
   ]
 
@@ -81,7 +81,11 @@ export default function Login() {
       setSubmitting(true)
       const loggedUser = await login(roleToUse, pinToUse)
       toast.success(`Welcome back, ${loggedUser.name}!`)
-      navigate('/pos')
+      if (loggedUser.role === 'EMPLOYEE') {
+        navigate('/pos')
+      } else {
+        navigate('/dashboard')
+      }
     } catch (err) {
       const msg = err.response?.data?.detail || 'Login failed. Invalid PIN.'
       toast.error(msg)
@@ -99,9 +103,7 @@ export default function Login() {
       } else if (e.key === 'Backspace') {
         setPin((prev) => prev.slice(0, -1))
       } else if (e.key === 'Enter') {
-        if (pin.length >= 4) submitLogin()
-      } else if (e.key === 'Escape') {
-        setPin('')
+        submitLogin()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -109,112 +111,115 @@ export default function Login() {
   }, [pin, selectedRole])
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.15 }}
-      className="min-h-screen w-screen bg-[var(--bg-main)] flex flex-col justify-center items-center p-4"
-    >
-      {/* OS Terminal Style Container */}
-      <div className="w-full max-w-3xl os-surface p-6 md:p-8 shadow-2xl relative overflow-hidden">
-        {/* Top Header */}
-        <div className="flex flex-col items-center text-center mb-8">
-          <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-white mb-3 shadow-lg shadow-blue-500/25">
-            <Store size={26} />
+    <div className="min-h-screen w-screen flex flex-col items-center justify-center p-4 bg-[var(--bg-main)] text-[var(--text-main)] select-none">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.18 }}
+        className="w-full max-w-md space-y-6"
+      >
+        {/* Brand Banner */}
+        <div className="text-center space-y-2">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-[3px] bg-[var(--accent)] text-[var(--accent-ink)] border-2 border-[var(--border-strong)] shadow-[3px_3px_0px_var(--border-strong)] mb-1">
+            <Store size={22} className="stroke-[2.5]" />
           </div>
-          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-[var(--text-main)]">
-            BusinessGPT Terminal
-          </h1>
-          <p className="text-xs md:text-sm text-[var(--text-muted)] mt-1 max-w-md">
-            Integrated POS billing and enterprise business intelligence platform for Indian retail & SMEs.
-          </p>
+          <div>
+            <div className="inline-block px-2.5 py-0.5 mb-2 font-mono text-[10px] uppercase font-bold tracking-widest bg-[var(--bg-surface-elevated)] border border-[var(--border-color)]">
+              Enterprise Terminal · Secure Auth
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold uppercase tracking-tight font-display text-[var(--text-main)]">
+              The Story of Your Business
+            </h1>
+            <p className="text-xs text-[var(--text-muted)] mt-1 font-mono uppercase tracking-wide">
+              Select access tier & enter 4-digit security PIN
+            </p>
+          </div>
         </div>
 
-        {/* Step 1: Role Selection Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+        {/* Role Selector Tabs */}
+        <div className="grid grid-cols-3 gap-2 p-1.5 rounded-[4px] bg-[var(--bg-surface)] border-2 border-[var(--border-color)] shadow-[2px_2px_0px_var(--border-color)]">
           {roles.map((r) => {
             const isSelected = selectedRole === r.id
             return (
-              <div
+              <button
                 key={r.id}
+                type="button"
                 onClick={() => {
                   setSelectedRole(r.id)
                   setPin('')
                 }}
-                className={`p-4 rounded-xl border transition-all cursor-pointer relative ${
+                className={`py-2 px-1 rounded-[3px] text-xs font-bold uppercase tracking-wider flex flex-col items-center gap-1 transition-all cursor-pointer ${
                   isSelected
-                    ? 'border-blue-500 bg-blue-500/5 shadow-md'
-                    : 'border-[var(--border-color)] bg-[var(--bg-surface-elevated)] hover:border-[var(--text-muted)]'
+                    ? 'bg-[var(--accent)] text-[var(--accent-ink)] border border-[var(--border-strong)] shadow-[2px_2px_0px_var(--border-strong)]'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)]'
                 }`}
               >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-[var(--text-main)]">{r.title}</span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono border ${r.color}`}>
-                    {r.badge}
-                  </span>
-                </div>
-                <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-                  {r.desc}
-                </p>
-                {isSelected && (
-                  <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-blue-500 animate-ping"></div>
-                )}
-              </div>
+                <span className="font-display font-bold">{r.title}</span>
+                <span className="text-[9px] font-mono opacity-80">
+                  {r.badge}
+                </span>
+              </button>
             )
           })}
         </div>
 
-        {/* Step 2: PIN Entry Section */}
-        <div className="max-w-xs mx-auto flex flex-col items-center">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3">
-            <KeyRound size={14} />
-            <span>Enter 4-Digit Security PIN</span>
+        {/* PIN Pad Console */}
+        <div className="card p-6 space-y-5 bg-[var(--bg-surface)] border-2 border-[var(--border-strong)] shadow-[4px_4px_0px_var(--border-strong)]">
+          {/* PIN Dots Display */}
+          <div className="text-center space-y-2">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--text-dim)] font-bold block">
+              Enter 4-Digit Security PIN
+            </span>
+            <div className="flex justify-center items-center gap-3 py-2">
+              {[0, 1, 2, 3].map((idx) => {
+                const filled = pin.length > idx
+                return (
+                  <div
+                    key={idx}
+                    className={`w-4 h-4 rounded-[2px] transition-all duration-120 ${
+                      filled
+                        ? 'bg-[var(--accent)] border-2 border-[var(--border-strong)] scale-110 shadow-[1px_1px_0px_var(--border-strong)]'
+                        : 'border-2 border-[var(--border-color)] bg-[var(--bg-surface-elevated)]'
+                    }`}
+                  />
+                )
+              })}
+            </div>
           </div>
 
-          {/* PIN Indicators */}
-          <div className="flex items-center gap-3 mb-6">
-            {[0, 1, 2, 3].map((idx) => {
-              const isFilled = pin.length > idx
-              return (
-                <div
-                  key={idx}
-                  className={`w-4 h-4 rounded-full border transition-all ${
-                    isFilled
-                      ? 'bg-blue-600 border-blue-600 scale-110 shadow-sm shadow-blue-500/50'
-                      : 'border-[var(--border-color)] bg-[var(--bg-surface-elevated)]'
-                  }`}
-                />
-              )
-            })}
-          </div>
-
-          {/* Virtual PIN Keypad */}
-          <div className="grid grid-cols-3 gap-2.5 w-full mb-6">
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+          {/* Numeric Keypad Grid */}
+          <div className="grid grid-cols-3 gap-2 font-mono font-bold">
+            {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
               <button
-                key={num}
-                onClick={() => handleKeyPress(num.toString())}
-                className="h-12 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface-elevated)] text-[var(--text-main)] font-semibold text-lg hover:bg-blue-600 hover:text-white transition-all active:scale-95 cursor-pointer"
+                key={digit}
+                type="button"
+                onClick={() => handleKeyPress(digit)}
+                className="py-3 rounded-[3px] bg-[var(--bg-surface-elevated)] border-2 border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--border-strong)] hover:bg-[var(--accent)] hover:text-[var(--accent-ink)] active:translate-x-0.5 active:translate-y-0.5 shadow-[2px_2px_0px_var(--border-color)] hover:shadow-[1px_1px_0px_var(--border-strong)] transition-all text-base cursor-pointer"
               >
-                {num}
+                {digit}
               </button>
             ))}
+
             <button
+              type="button"
               onClick={handleClear}
-              className="h-12 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface-elevated)] text-[var(--text-muted)] hover:text-red-500 text-xs font-semibold transition-all active:scale-95 cursor-pointer"
+              className="py-3 rounded-[3px] bg-[var(--bg-surface-elevated)] border-2 border-[var(--border-color)] text-[var(--text-dim)] hover:text-red-600 hover:border-red-600 active:translate-x-0.5 active:translate-y-0.5 shadow-[2px_2px_0px_var(--border-color)] transition-all text-xs font-mono font-bold tracking-wider cursor-pointer uppercase"
             >
-              CLEAR
+              CLR
             </button>
+
             <button
+              type="button"
               onClick={() => handleKeyPress('0')}
-              className="h-12 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface-elevated)] text-[var(--text-main)] font-semibold text-lg hover:bg-blue-600 hover:text-white transition-all active:scale-95 cursor-pointer"
+              className="py-3 rounded-[3px] bg-[var(--bg-surface-elevated)] border-2 border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--border-strong)] hover:bg-[var(--accent)] hover:text-[var(--accent-ink)] active:translate-x-0.5 active:translate-y-0.5 shadow-[2px_2px_0px_var(--border-color)] hover:shadow-[1px_1px_0px_var(--border-strong)] transition-all text-base cursor-pointer"
             >
               0
             </button>
+
             <button
+              type="button"
               onClick={handleBackspace}
-              className="h-12 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface-elevated)] text-[var(--text-muted)] hover:text-[var(--text-main)] flex items-center justify-center transition-all active:scale-95 cursor-pointer"
+              className="py-3 rounded-[3px] bg-[var(--bg-surface-elevated)] border-2 border-[var(--border-color)] text-[var(--text-dim)] hover:text-[var(--text-main)] active:translate-x-0.5 active:translate-y-0.5 shadow-[2px_2px_0px_var(--border-color)] transition-all flex items-center justify-center cursor-pointer"
             >
               <Delete size={18} />
             </button>
@@ -222,45 +227,39 @@ export default function Login() {
 
           {/* Submit Button */}
           <button
+            type="button"
             onClick={() => submitLogin()}
-            disabled={submitting || pin.length < 4}
-            className="w-full btn-accent py-3 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            disabled={pin.length < 4 || submitting}
+            className="w-full btn-accent py-3 text-xs font-bold tracking-wider cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed uppercase"
           >
-            {submitting ? 'Verifying...' : `Login as ${selectedRole}`}
-            <ArrowRight size={16} />
+            {submitting ? 'Authenticating Session...' : 'Authorize Terminal Session'}
           </button>
         </div>
 
-        {/* Quick Demo Access Bar */}
-        <div className="mt-8 pt-6 border-t border-[var(--border-color)]">
-          <div className="text-[11px] text-[var(--text-muted)] text-center font-mono uppercase tracking-wider mb-2.5">
-            Quick Demo Shortcuts
-          </div>
-          <div className="flex flex-wrap justify-center gap-2">
-            <button
-              onClick={() => handleQuickDemo('OWNER', '1111')}
-              className="px-3 py-1.5 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-400 text-xs font-medium hover:bg-blue-500/20 transition-all cursor-pointer flex items-center gap-1.5"
-            >
-              <ShieldCheck size={13} />
-              Owner PIN (1111)
-            </button>
-            <button
-              onClick={() => handleQuickDemo('MANAGER', '2222')}
-              className="px-3 py-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs font-medium hover:bg-amber-500/20 transition-all cursor-pointer flex items-center gap-1.5"
-            >
-              <UserCheck size={13} />
-              Manager PIN (2222)
-            </button>
-            <button
-              onClick={() => handleQuickDemo('EMPLOYEE', '3333')}
-              className="px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs font-medium hover:bg-emerald-500/20 transition-all cursor-pointer flex items-center gap-1.5"
-            >
-              <Store size={13} />
-              Employee PIN (3333)
-            </button>
+        {/* Instant Demo Quick Start Badges */}
+        <div className="card p-4 space-y-2.5 bg-[var(--bg-surface)] border-2 border-[var(--border-color)] shadow-[2px_2px_0px_var(--border-color)]">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--text-dim)] block text-center font-bold">
+            Demo Access Profiles
+          </span>
+          <div className="grid grid-cols-3 gap-2">
+            {roles.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => handleQuickDemo(r.id, r.defaultPin)}
+                className="p-2.5 rounded-[3px] bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] hover:border-[var(--border-strong)] hover:bg-[var(--accent)] hover:text-[var(--accent-ink)] transition-all text-center cursor-pointer group shadow-[1px_1px_0px_var(--border-color)]"
+              >
+                <div className="text-[11px] font-bold font-display uppercase truncate">
+                  {r.title}
+                </div>
+                <div className="text-[10px] font-mono text-[var(--text-dim)] group-hover:text-[var(--accent-ink)] mt-0.5 font-bold">
+                  PIN: {r.defaultPin}
+                </div>
+              </button>
+            ))}
           </div>
         </div>
-      </div>
-    </motion.div>
+      </motion.div>
+    </div>
   )
 }

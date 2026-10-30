@@ -10,7 +10,8 @@ import {
   Boxes,
   Sparkles,
   Calendar,
-  Check
+  Check,
+  CheckCheck
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -71,11 +72,11 @@ export default function Alerts() {
   const getSeverityBadge = (severity) => {
     switch (severity) {
       case 'HIGH':
-        return <span className="badge-critical">HIGH SEVERITY</span>
+        return <span className="badge-critical">CRITICAL</span>
       case 'MEDIUM':
-        return <span className="badge-low">MEDIUM</span>
+        return <span className="badge-low">ATTENTION</span>
       default:
-        return <span className="badge-optimal">INFO</span>
+        return <span className="badge-optimal">INFORMATIONAL</span>
     }
   }
 
@@ -85,102 +86,118 @@ export default function Alerts() {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.15 }}
-      className="space-y-5"
+      className="space-y-6 max-w-7xl mx-auto pb-10"
     >
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Editorial Prologue Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b-2 border-[var(--border-color)] pb-4">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-[var(--text-main)] flex items-center gap-2">
-            <Bell size={20} className="text-blue-500" />
-            Operational & Business Intelligence Alerts
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="font-mono text-[10px] uppercase font-bold tracking-widest px-2.5 py-0.5 bg-[var(--bg-surface-elevated)] border border-[var(--border-color)]">
+              Priority Signals · Chapter 04
+            </span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-extrabold uppercase tracking-tight text-[var(--text-main)] font-display">
+            Action Directives & Anomaly Alerts
           </h1>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">
-            Automated stock warnings, seasonal festival demand spikes, and anomaly alerts.
+          <p className="text-xs text-[var(--text-muted)] mt-0.5 font-mono uppercase tracking-wide">
+            Automated stock warnings, Indian festival surge alerts, and margin anomaly monitoring.
           </p>
         </div>
 
-        {/* Filter Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto p-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] text-xs">
-          {['ALL', 'UNREAD', 'CRITICAL', 'INVENTORY', 'FESTIVAL'].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setFilterTab(tab)}
-              className={`px-3 py-1 rounded-md font-mono font-medium transition-all cursor-pointer whitespace-nowrap ${
-                filterTab === tab
-                  ? 'bg-blue-600 text-white font-bold shadow-sm'
-                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
+        {/* Tab Filters */}
+        <div className="flex items-center gap-1.5 overflow-x-auto p-1 rounded-[3px] bg-[var(--bg-surface)] border-2 border-[var(--border-color)] shadow-[2px_2px_0px_var(--border-color)]">
+          {[
+            { label: 'All Alerts', val: 'ALL' },
+            { label: 'Unread', val: 'UNREAD' },
+            { label: 'Critical', val: 'CRITICAL' },
+            { label: 'Inventory', val: 'INVENTORY' },
+            { label: 'Festivals', val: 'FESTIVAL' },
+          ].map((tab) => {
+            const isActive = filterTab === tab.val
+            return (
+              <button
+                key={tab.val}
+                onClick={() => setFilterTab(tab.val)}
+                className={`px-3 py-1 rounded-[2px] text-xs font-mono font-bold uppercase tracking-wider whitespace-nowrap transition-all cursor-pointer ${
+                  isActive
+                    ? 'bg-[var(--accent)] text-[var(--accent-ink)] border border-[var(--border-strong)] shadow-[1px_1px_0px_var(--border-strong)]'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)]'
+                }`}
+              >
+                {tab.label}
+              </button>
+            )
+          })}
         </div>
       </div>
 
-      {/* Alerts Stream */}
+      {/* Alerts Feed */}
       <div className="space-y-3">
         {loading ? (
           <div className="space-y-3">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-20 rounded-xl os-surface animate-pulse" />
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="skeleton h-20 rounded-xl" />
             ))}
           </div>
         ) : filteredAlerts.length === 0 ? (
-          <div className="os-surface p-12 text-center text-[var(--text-muted)] flex flex-col items-center">
-            <CheckCircle size={36} className="text-emerald-500 mb-2 opacity-80" />
-            <p className="text-sm font-semibold text-[var(--text-main)]">Sab Theek Hai! (All Clear)</p>
-            <p className="text-xs text-[var(--text-muted)] mt-1">No pending unread alerts in this category.</p>
+          <div className="card py-16 flex flex-col items-center justify-center text-center gap-3">
+            <CheckCheck size={32} className="text-emerald-500" />
+            <div>
+              <p className="text-sm font-bold text-[var(--text-main)]">
+                No active directives in this category
+              </p>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                All business parameters and inventory buffers are operating within defined thresholds.
+              </p>
+            </div>
           </div>
         ) : (
-          filteredAlerts.map((alert) => (
-            <div
-              key={alert.id}
-              className={`p-4 rounded-xl os-surface border transition-all flex items-start justify-between gap-4 ${
-                alert.is_read
-                  ? 'opacity-60 bg-[var(--bg-surface)]'
-                  : alert.severity === 'HIGH'
-                  ? 'border-l-4 border-l-red-500 bg-red-500/5'
-                  : 'border-l-4 border-l-blue-500'
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <div className="p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] shrink-0">
-                  {getAlertIcon(alert.alert_type)}
+          filteredAlerts.map((alert) => {
+            return (
+              <div
+                key={alert.id}
+                className={`p-4 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                  alert.is_read
+                    ? 'bg-[var(--bg-surface)] border-[var(--border-color)] opacity-70'
+                    : 'bg-[var(--bg-surface-elevated)] border-[var(--border-strong)] shadow-xs'
+                }`}
+              >
+                <div className="flex items-start gap-3.5 min-w-0">
+                  <div className="p-2.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] shrink-0 mt-0.5">
+                    {getAlertIcon(alert.alert_type)}
+                  </div>
+
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      {getSeverityBadge(alert.severity)}
+                      <span className="text-[10px] font-mono text-[var(--text-dim)] uppercase">
+                        {alert.alert_type}
+                      </span>
+                      {alert.created_at && (
+                        <span className="text-[10px] font-mono text-[var(--text-dim)]">
+                          · {new Date(alert.created_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-xs sm:text-sm font-medium text-[var(--text-main)] leading-relaxed">
+                      {alert.message}
+                    </p>
+                  </div>
                 </div>
 
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
-                      {alert.alert_type}
-                    </span>
-                    {getSeverityBadge(alert.severity)}
-                    {alert.is_read && (
-                      <span className="text-[10px] font-mono text-[var(--text-muted)]">Read</span>
-                    )}
-                  </div>
-                  <p className="text-xs font-medium text-[var(--text-main)] leading-relaxed">
-                    {alert.message}
-                  </p>
-                  <div className="text-[10px] text-[var(--text-muted)] font-mono">
-                    {new Date(alert.created_at).toLocaleString('en-IN', {
-                      dateStyle: 'medium',
-                      timeStyle: 'short',
-                    })}
-                  </div>
-                </div>
+                {!alert.is_read && (
+                  <button
+                    onClick={() => markRead(alert.id)}
+                    className="btn-ghost text-xs py-1.5 px-3 shrink-0 cursor-pointer self-end sm:self-center"
+                  >
+                    <Check size={13} />
+                    <span>Acknowledge</span>
+                  </button>
+                )}
               </div>
-
-              {!alert.is_read && (
-                <button
-                  onClick={() => markRead(alert.id)}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-medium border border-[var(--border-color)] hover:border-emerald-500 hover:text-emerald-500 transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
-                >
-                  <Check size={12} />
-                  Mark Read
-                </button>
-              )}
-            </div>
-          ))
+            )
+          })
         )}
       </div>
     </motion.div>

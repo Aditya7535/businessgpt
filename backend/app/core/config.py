@@ -4,6 +4,10 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
+# Ensure .env is loaded from backend directory and workspace root
+_backend_env = Path(__file__).resolve().parent.parent.parent / ".env"
+if _backend_env.is_file():
+    load_dotenv(_backend_env, override=True)
 load_dotenv(override=True)
 
 import urllib.parse
@@ -31,6 +35,9 @@ def _normalize_database_url(url: str) -> str:
                 url = f"{scheme}://{auth_host}{path}"
 
     if url.startswith("sqlite"):
+        if "./businessgpt.db" in url or url == "sqlite:///./businessgpt.db":
+            backend_db = Path(__file__).resolve().parent.parent.parent / "businessgpt.db"
+            return f"sqlite:///{backend_db.as_posix()}"
         return url
     if url.startswith("postgres://"):
         return url.replace("postgres://", "postgresql+pg8000://", 1)

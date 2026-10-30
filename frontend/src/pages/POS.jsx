@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { posAPI, settingsAPI } from '../services/api'
+import { posAPI, settingsAPI, customerAPI } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import PrintModal from '../components/PrintModal'
 import {
@@ -13,13 +13,46 @@ import {
   QrCode,
   Banknote,
   Printer,
-  CheckCircle,
+  CheckCircle2,
   X,
   Package,
   AlertTriangle,
-  RotateCcw
+  RotateCcw,
+  Sparkles,
+  Layers,
+  ArrowRight,
+  User,
+  UserCheck,
+  UserPlus,
+  Check,
+  Contact,
+  Edit2,
+  ShieldAlert,
+  Save
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+
+const isPhoneValid = (phone) => {
+  if (!phone || !String(phone).trim()) return false
+  const str = String(phone).trim()
+  if (/[a-zA-Z]/.test(str)) return false
+  const digits = str.replace(/[^\d]/g, '')
+  return digits.length >= 10 && digits.length <= 15
+}
+
+const isEmailValid = (email) => {
+  if (!email || !String(email).trim()) return false
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())
+}
+
+const FIELD_CONFIG_METADATA = {
+  full_name: { label: 'Full name', placeholder: 'e.g. Ramesh Sharma', type: 'text' },
+  phone: { label: 'Mobile number', placeholder: 'e.g. 9876543210', type: 'tel' },
+  email: { label: 'Email address', placeholder: 'e.g. ramesh@example.com', type: 'email' },
+  billing_address: { label: 'Billing address', placeholder: 'Street, City, Pincode', type: 'text' },
+  date_of_birth: { label: 'Date of birth', placeholder: 'YYYY-MM-DD', type: 'date' },
+  notes: { label: 'Customer notes', placeholder: 'Preferences or remarks', type: 'text' }
+}
 
 export default function POS() {
   const { user } = useAuth()
@@ -35,26 +68,102 @@ export default function POS() {
   const [completedBill, setCompletedBill] = useState(null)
   const [lastBill, setLastBill] = useState(null)
   const [showBillModal, setShowBillModal] = useState(false)
+  const [cashTendered, setCashTendered] = useState('')
+
   const [storeSettings, setStoreSettings] = useState({
     business_name: 'Bharat General Store & Supermart',
     address: 'Shop No. 12, Main Market, MG Road, Mumbai 400001',
     gstin: '27AABCB1234F1Z5',
   })
 
+  // Customer Information CRM State
+  const [customerSettings, setCustomerSettings] = useState({
+    enabled: false,
+    allow_walk_in: true,
+    customer_selection_optional: true,
+    save_purchase_history: false,
+    require_consent: false,
+    enabled_fields: ['full_name', 'phone'],
+    required_fields: []
+  })
+
+  // Customer Selection / Form Mode: 'walk_in' | 'select' | 'new'
+  const [customerMode, setCustomerMode] = useState('walk_in')
+  const [selectedCustomer, setSelectedCustomer] = useState(null)
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [customerResults, setCustomerResults] = useState([])
+  const [searchingCustomer, setSearchingCustomer] = useState(false)
+  const [showCustomerSearch, setShowCustomerSearch] = useState(false)
+
+  // New Customer Form State
+  const [newCustomerForm, setNewCustomerForm] = useState({
+    full_name: '',
+    phone: '',
+    email: '',
+    billing_address: '',
+    date_of_birth: '',
+    notes: '',
+    consent_given: false
+  })
+  const [touchedFields, setTouchedFields] = useState({})
+
+  // Edit Customer Modal State
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editCustomerForm, setEditCustomerForm] = useState({})
+  const [savingEdit, setSavingEdit] = useState(false)
+
   const searchInputRef = useRef(null)
 
-  // Load store settings on mount
+  // Load store settings & customer collection configuration on mount
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await settingsAPI.getSettings()
-        if (res.data) setStoreSettings(res.data)
+        const [storeRes, custRes] = await Promise.allSettled([
+          settingsAPI.getSettings(),
+          customerAPI.getSettings()
+        ])
+        if (storeRes.status === 'fulfilled' && storeRes.value.data) {
+          setStoreSettings(storeRes.value.data)
+        }
+        if (custRes.status === 'fulfilled' && custRes.value.data) {
+          const cfg = custRes.value.data
+          setCustomerSettings(cfg)
+
+          // If required fields exist, walk-in cannot bypass them -> switch mode to 'new' or 'select'
+          const hasRequiredFields = (cfg.required_fields || []).length > 0
+          if (cfg.enabled && (hasRequiredFields || !cfg.allow_walk_in)) {
+            setCustomerMode('new')
+          } else {
+            setCustomerMode('walk_in')
+          }
+        }
       } catch (err) {
         // Fallback to default
       }
     }
     fetchSettings()
   }, [])
+
+  // Customer search debouncer
+  useEffect(() => {
+    if (!customerSearch.trim() || customerSearch.trim().length < 2) {
+      setCustomerResults([])
+      return
+    }
+    const timer = setTimeout(async () => {
+      try {
+        setSearchingCustomer(true)
+        const res = await customerAPI.searchCustomers(customerSearch.trim())
+        setCustomerResults(res.data || [])
+      } catch (err) {
+        setCustomerResults([])
+      } finally {
+        setSearchingCustomer(false)
+      }
+    }, 250)
+
+    return () => clearTimeout(timer)
+  }, [customerSearch])
 
   // Fetch products
   const fetchProducts = async (q = searchQuery, cat = selectedCategory) => {
@@ -72,6 +181,9 @@ export default function POS() {
   useEffect(() => {
     fetchProducts(searchQuery, selectedCategory)
   }, [searchQuery, selectedCategory])
+
+  // Extract unique categories
+  const categories = ['All', ...new Set(products.map((p) => p.category).filter(Boolean))]
 
   // Cart operations
   const addToCart = (product) => {
@@ -99,11 +211,11 @@ export default function POS() {
             product_id: product.id,
             name: product.name,
             sku: product.sku,
-            unit_price: product.unit_price,
+            unit_price: Number(product.unit_price),
             quantity: 1,
-            unit: product.unit,
+            unit: product.unit || 'pcs',
             max_stock: product.current_stock,
-            subtotal: product.unit_price,
+            subtotal: Number(product.unit_price),
           },
         ]
       }
@@ -115,16 +227,16 @@ export default function POS() {
       prev
         .map((item) => {
           if (item.product_id === productId) {
-            const newQty = item.quantity + delta
-            if (newQty > item.max_stock) {
-              toast.error(`Maximum stock reached (${item.max_stock} units).`)
+            const nextQty = item.quantity + delta
+            if (nextQty <= 0) return null
+            if (nextQty > item.max_stock) {
+              toast.error(`Max stock available is ${item.max_stock}.`)
               return item
             }
-            if (newQty <= 0) return null
             return {
               ...item,
-              quantity: newQty,
-              subtotal: Math.round(newQty * item.unit_price * 100) / 100,
+              quantity: nextQty,
+              subtotal: nextQty * item.unit_price,
             }
           }
           return item
@@ -138,78 +250,245 @@ export default function POS() {
   }
 
   const clearCart = () => {
-    setCart([])
+    if (cart.length > 0) {
+      setCart([])
+      setCashTendered('')
+    }
   }
 
-  // Calculations
-  const subtotal = cart.reduce((sum, item) => sum + item.subtotal, 0)
-  const taxAmount = Math.round(subtotal * taxRate * 100) / 100
-  const grandTotal = Math.round((subtotal + taxAmount) * 100) / 100
+  // Customer selection helpers
+  const handleSelectCustomer = (cust) => {
+    setSelectedCustomer(cust)
+    setCustomerMode('select')
+    setShowCustomerSearch(false)
+    setCustomerSearch('')
+  }
 
-  // Keyboard shortcuts: F2 = search, Esc = clear cart, Ctrl+P = print last bill
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'F2') {
-        e.preventDefault()
-        searchInputRef.current?.focus()
-        searchInputRef.current?.select()
-      } else if (e.key === 'Escape') {
-        if (showBillModal) {
-          setShowBillModal(false)
-        } else if (cart.length > 0) {
-          clearCart()
-          toast('Cart cleared', { icon: '🧹' })
-        }
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
-        e.preventDefault()
-        const targetBill = completedBill || lastBill
-        if (targetBill) {
-          setCompletedBill(targetBill)
-          setShowBillModal(true)
-        } else {
-          toast.error('No bill to print yet.')
-        }
+  const handleClearCustomer = () => {
+    setSelectedCustomer(null)
+    const hasRequired = (customerSettings.required_fields || []).length > 0
+    if (!customerSettings.enabled || (customerSettings.allow_walk_in && !hasRequired)) {
+      setCustomerMode('walk_in')
+    } else {
+      setCustomerMode('new')
+    }
+    setNewCustomerForm({
+      full_name: '',
+      phone: '',
+      email: '',
+      billing_address: '',
+      date_of_birth: '',
+      notes: '',
+      consent_given: false
+    })
+    setTouchedFields({})
+  }
+
+  // Edit selected customer
+  const handleOpenEditModal = () => {
+    if (!selectedCustomer) return
+    setEditCustomerForm({
+      full_name: selectedCustomer.full_name || '',
+      phone: selectedCustomer.phone || '',
+      email: selectedCustomer.email || '',
+      billing_address: selectedCustomer.billing_address || '',
+      date_of_birth: selectedCustomer.date_of_birth || '',
+      notes: selectedCustomer.notes || '',
+      consent_given: Boolean(selectedCustomer.consent_given)
+    })
+    setShowEditModal(true)
+  }
+
+  const handleSaveEditCustomer = async (e) => {
+    e.preventDefault()
+    try {
+      setSavingEdit(true)
+      const res = await customerAPI.updateCustomer(selectedCustomer.id, editCustomerForm)
+      setSelectedCustomer(res.data)
+      setShowEditModal(false)
+      toast.success('Customer details updated!')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update customer details.')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  // Financial calculations
+  const subtotal = cart.reduce((acc, item) => acc + item.subtotal, 0)
+  const taxAmount = subtotal * taxRate
+  const grandTotal = subtotal + taxAmount
+  const changeDue = Math.max(0, Number(cashTendered || 0) - grandTotal)
+
+  // ── STRICT CUSTOMER VALIDATION BEFORE BILL GENERATION ──
+  const isWalkInPermitted = useMemo(() => {
+    if (!customerSettings.enabled) return true
+    const requiredList = customerSettings.required_fields || []
+    return customerSettings.allow_walk_in && requiredList.length === 0
+  }, [customerSettings])
+
+  // Selected customer validation (does selected customer satisfy all required fields?)
+  const selectedCustomerValidationErrors = useMemo(() => {
+    if (!customerSettings.enabled || customerMode !== 'select' || !selectedCustomer) return []
+    const required = customerSettings.required_fields || []
+    const errors = []
+
+    for (const req of required) {
+      const val = selectedCustomer[req]
+      if (!val || !String(val).trim()) {
+        const label = FIELD_CONFIG_METADATA[req]?.label || req
+        errors.push(`${label} is required by store policy. Click Edit to complete details.`)
       }
     }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showBillModal, cart, completedBill, lastBill])
 
+    if (required.includes('phone') && selectedCustomer.phone && !isPhoneValid(selectedCustomer.phone)) {
+      errors.push('Mobile number is invalid. Click Edit to update.')
+    }
+
+    return errors
+  }, [customerSettings, customerMode, selectedCustomer])
+
+  // New Customer Form Validation
+  const newCustomerValidationErrors = useMemo(() => {
+    if (!customerSettings.enabled || customerMode !== 'new') return {}
+    const required = customerSettings.required_fields || []
+    const errors = {}
+
+    for (const req of required) {
+      const val = newCustomerForm[req]
+      if (!val || !String(val).trim()) {
+        errors[req] = `${FIELD_CONFIG_METADATA[req]?.label || req} is required.`
+      }
+    }
+
+    // Phone format check
+    if (newCustomerForm.phone && newCustomerForm.phone.trim()) {
+      if (!isPhoneValid(newCustomerForm.phone)) {
+        errors.phone = 'Please enter a valid 10-digit mobile number.'
+      }
+    }
+
+    // Email format check
+    if (newCustomerForm.email && newCustomerForm.email.trim()) {
+      if (!isEmailValid(newCustomerForm.email)) {
+        errors.email = 'Please enter a valid email address.'
+      }
+    }
+
+    // Consent check
+    if (customerSettings.require_consent && !newCustomerForm.consent_given) {
+      errors.consent = 'Customer consent must be confirmed.'
+    }
+
+    return errors
+  }, [customerSettings, customerMode, newCustomerForm])
+
+  // Master checkout readiness boolean
+  const isCustomerInfoValid = useMemo(() => {
+    if (!customerSettings.enabled) return true
+
+    if (customerMode === 'walk_in') {
+      return isWalkInPermitted
+    }
+
+    if (customerMode === 'select') {
+      return Boolean(selectedCustomer) && selectedCustomerValidationErrors.length === 0
+    }
+
+    if (customerMode === 'new') {
+      return Object.keys(newCustomerValidationErrors).length === 0
+    }
+
+    return false
+  }, [
+    customerSettings.enabled,
+    customerMode,
+    isWalkInPermitted,
+    selectedCustomer,
+    selectedCustomerValidationErrors,
+    newCustomerValidationErrors
+  ])
+
+  // Submit Bill
   const handleCheckout = async () => {
-    if (cart.length === 0) {
-      toast.error('Cart is empty. Add products to generate a bill.')
+    if (cart.length === 0 || submitting) return
+
+    if (!isCustomerInfoValid) {
+      if (customerMode === 'walk_in' && !isWalkInPermitted) {
+        toast.error('Walk-in billing is not permitted when required customer fields are configured.')
+      } else if (customerMode === 'select' && selectedCustomerValidationErrors.length > 0) {
+        toast.error(selectedCustomerValidationErrors[0])
+      } else if (customerMode === 'new') {
+        const firstErr = Object.values(newCustomerValidationErrors)[0]
+        toast.error(firstErr || 'Please complete all required customer fields before generating bill.')
+      } else {
+        toast.error('Please select or provide customer information before generating bill.')
+      }
       return
+    }
+
+    if (paymentMethod === 'Cash' && cashTendered && Number(cashTendered) < grandTotal) {
+      toast.error(`Tendered cash is less than grand total ₹${grandTotal.toFixed(2)}`)
+      return
+    }
+
+    // Prepare Customer Payload
+    let customerIdToSend = null
+    let customerDataToSend = null
+
+    if (customerSettings.enabled) {
+      if (customerMode === 'select' && selectedCustomer) {
+        customerIdToSend = selectedCustomer.id
+      } else if (customerMode === 'new') {
+        const enabledFields = new Set(customerSettings.enabled_fields || [])
+        customerDataToSend = {
+          consent_given: Boolean(newCustomerForm.consent_given)
+        }
+        for (const f of enabledFields) {
+          if (newCustomerForm[f]) customerDataToSend[f] = String(newCustomerForm[f]).trim()
+        }
+      }
     }
 
     try {
       setSubmitting(true)
       const payload = {
-        items: cart.map((c) => ({
-          product_id: c.product_id,
-          quantity: c.quantity,
-          unit_price: c.unit_price,
+        items: cart.map((item) => ({
+          product_id: item.product_id,
+          name: item.name,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          subtotal: item.subtotal,
         })),
         payment_method: paymentMethod,
         tax_rate: taxRate,
+        customer_id: customerIdToSend,
+        customer_data: customerDataToSend,
+        notes: ''
       }
 
       const res = await posAPI.createBill(payload)
-      setCompletedBill(res.data)
-      setLastBill(res.data)
+      const billData = res.data
+      setCompletedBill(billData)
+      setLastBill(billData)
       setShowBillModal(true)
-      clearCart()
-      toast.success(`Bill ${res.data.bill_number} generated successfully!`)
-      // Refresh products to update live stock count
-      fetchProducts(searchQuery, selectedCategory)
+      toast.success(`Bill #${billData.bill_number || billData.id} generated successfully!`)
+
+      // Reset cart and customer state for next customer
+      setCart([])
+      setCashTendered('')
+      handleClearCustomer()
+
+      // Refresh products to show updated stock
+      fetchProducts()
     } catch (err) {
-      const msg = err.response?.data?.detail || 'Failed to complete transaction.'
+      console.error('Checkout error:', err)
+      const msg = err.response?.data?.detail || 'Transaction failed.'
       toast.error(msg)
     } finally {
       setSubmitting(false)
     }
   }
-
-  const categories = ['All', 'Grocery', 'Snacks', 'Personal Care', 'Dairy', 'Household']
 
   return (
     <motion.div
@@ -217,37 +496,69 @@ export default function POS() {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.15 }}
-      className="flex flex-col gap-3 h-[calc(100vh-5.5rem)]"
+      className="h-[calc(100vh-6.5rem)] flex flex-col lg:flex-row gap-4"
     >
-      <div className="flex flex-col lg:flex-row gap-5 flex-1 min-h-0">
-      {/* ── LEFT PANEL (60%): Product Search & Grid ── */}
-      <div className="flex-[3] flex flex-col os-surface overflow-hidden">
-        {/* Search & Category Filter Header */}
-        <div className="p-4 border-b border-[var(--border-color)] space-y-3 bg-[var(--bg-surface)]">
-          <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" size={16} />
+      {/* ── Left Column: Product Catalog & Fast Grid ── */}
+      <div className="flex-1 flex flex-col card p-0 border-2 border-[var(--border-color)] overflow-hidden bg-[var(--bg-surface)] shadow-[4px_4px_0px_var(--border-color)]">
+        {/* Catalog Header & Search */}
+        <div className="p-3.5 border-b-2 border-[var(--border-color)] bg-[var(--bg-surface-elevated)] space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--text-dim)] font-bold block">
+                Chapter 01 · Immediate Counter Register
+              </span>
+              <h2 className="text-base font-extrabold uppercase tracking-tight text-[var(--text-main)] font-display">
+                Point of Sale Terminal
+              </h2>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {lastBill && (
+                <button
+                  onClick={() => {
+                    setCompletedBill(lastBill)
+                    setShowBillModal(true)
+                  }}
+                  className="btn-secondary text-xs py-1 px-2.5 cursor-pointer font-bold font-mono uppercase tracking-wider"
+                  title="Reprint last receipt"
+                >
+                  <Printer size={13} className="stroke-[2.2]" />
+                  <span>Reprint #{lastBill.bill_number || lastBill.id}</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Search bar */}
+          <div className="flex items-center gap-2 bg-[var(--bg-surface)] border-2 border-[var(--border-color)] rounded-[3px] px-3 py-1.5 focus-within:border-[var(--accent)] transition-all shadow-[1px_1px_0px_var(--border-color)]">
+            <Search size={15} className="text-[var(--text-dim)] shrink-0 stroke-[2.2]" />
             <input
               ref={searchInputRef}
               type="text"
-              placeholder="Search product by name or SKU (e.g., Basmati, GROC-001)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-xs focus:outline-none focus:border-blue-500 text-[var(--text-main)]"
+              placeholder="Search product name, SKU, or category..."
+              className="w-full bg-transparent border-none text-xs font-mono text-[var(--text-main)] placeholder-[var(--text-dim)] focus:outline-none"
             />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="text-[var(--text-dim)] hover:text-[var(--text-main)]">
+                <X size={13} />
+              </button>
+            )}
           </div>
 
           {/* Category Chips */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
             {categories.map((cat) => {
-              const active = (cat === 'All' && !selectedCategory) || selectedCategory === cat
+              const isActive = selectedCategory === (cat === 'All' ? '' : cat)
               return (
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat === 'All' ? '' : cat)}
-                  className={`px-3 py-1.5 rounded-md font-medium whitespace-nowrap transition-all cursor-pointer ${
-                    active
-                      ? 'bg-blue-600 text-white font-semibold shadow-sm'
-                      : 'bg-[var(--bg-surface-elevated)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-[var(--border-color)]'
+                  className={`px-2.5 py-1 rounded-[3px] text-xs font-mono font-bold uppercase tracking-wider whitespace-nowrap transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-[var(--accent)] text-[var(--accent-ink)] border border-[var(--border-strong)] shadow-[1px_1px_0px_var(--border-strong)]'
+                      : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border border-[var(--border-color)] hover:border-[var(--border-strong)]'
                   }`}
                 >
                   {cat}
@@ -257,62 +568,67 @@ export default function POS() {
           </div>
         </div>
 
-        {/* Product Grid */}
-        <div className="flex-1 overflow-y-auto p-4">
+        {/* Product Cards Grid */}
+        <div className="flex-1 overflow-y-auto p-3.5">
           {loading ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
-              {[...Array(8)].map((_, i) => (
-                <div key={i} className="h-32 rounded-xl bg-[var(--bg-surface-elevated)] animate-pulse border border-[var(--border-color)]" />
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                <div key={i} className="skeleton h-28 rounded-[3px]" />
               ))}
             </div>
           ) : products.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-[var(--text-muted)]">
-              <Package size={36} className="mb-2 opacity-50" />
-              <p className="text-xs font-medium">No products found matching your search</p>
+            <div className="h-full flex flex-col items-center justify-center text-[var(--text-dim)] gap-2 py-12">
+              <Package size={28} className="opacity-40 stroke-[2]" />
+              <p className="text-xs font-bold font-mono uppercase tracking-wider">No products match your query.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
-              {products.map((p) => {
-                const isOutOfStock = p.current_stock <= 0
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+              {products.map((prod) => {
+                const inCart = cart.find((it) => it.product_id === prod.id)
+                const isOutOfStock = prod.current_stock <= 0
+                const isLow = prod.current_stock <= (prod.reorder_point || 10)
+
                 return (
                   <div
-                    key={p.id}
-                    onClick={() => !isOutOfStock && addToCart(p)}
-                    className={`p-3.5 rounded-xl border flex flex-col justify-between transition-all cursor-pointer group ${
+                    key={prod.id}
+                    onClick={() => !isOutOfStock && addToCart(prod)}
+                    className={`p-3 border-2 transition-all flex flex-col justify-between cursor-pointer group relative rounded-[3px] ${
                       isOutOfStock
-                        ? 'opacity-40 border-[var(--border-color)] bg-[var(--bg-surface)] cursor-not-allowed'
-                        : 'border-[var(--border-color)] bg-[var(--bg-surface-elevated)] hover:border-blue-500 hover:shadow-md'
+                        ? 'opacity-40 cursor-not-allowed border-[var(--border-color)] bg-[var(--bg-surface-elevated)]'
+                        : inCart
+                        ? 'border-[var(--border-strong)] bg-[var(--accent)] text-[var(--accent-ink)] shadow-[2px_2px_0px_var(--border-strong)]'
+                        : 'border-[var(--border-color)] bg-[var(--bg-surface)] hover:border-[var(--border-strong)] hover:shadow-[3px_3px_0px_var(--border-color)]'
                     }`}
                   >
                     <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[10px] font-mono text-[var(--text-muted)] uppercase">{p.sku}</span>
-                        {p.is_critical ? (
-                          <span className="badge-critical">Critical</span>
-                        ) : p.is_low_stock ? (
-                          <span className="badge-low">Low Stock</span>
-                        ) : (
-                          <span className="badge-optimal">In Stock</span>
-                        )}
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className="text-[10px] font-mono text-[var(--text-dim)] uppercase truncate font-bold">
+                          {prod.category}
+                        </span>
+                        {isOutOfStock ? (
+                          <span className="badge-critical text-[9px] px-1 py-0.2 rounded-[2px]">Out</span>
+                        ) : isLow ? (
+                          <span className="badge-low text-[9px] px-1 py-0.2 rounded-[2px]">Low</span>
+                        ) : null}
                       </div>
-                      <h3 className="font-semibold text-xs text-[var(--text-main)] line-clamp-2 mb-1 group-hover:text-blue-500 transition-colors">
-                        {p.name}
-                      </h3>
-                      <div className="text-[11px] text-[var(--text-muted)]">{p.category}</div>
+
+                      <h4 className="font-bold text-xs text-[var(--text-main)] group-hover:text-[var(--border-strong)] transition-colors line-clamp-2 uppercase font-display">
+                        {prod.name}
+                      </h4>
                     </div>
 
-                    <div className="mt-3 pt-2.5 border-t border-[var(--border-color)] flex items-center justify-between">
+                    <div className="mt-2.5 pt-2 border-t border-[var(--border-color)] flex items-center justify-between">
                       <div className="flex flex-col">
-                        <span className="text-[10px] text-[var(--text-muted)]">Price</span>
-                        <span className="text-sm font-bold text-[var(--text-main)] font-mono">
-                          ₹{p.unit_price.toFixed(2)}
+                        <span className="font-mono text-xs sm:text-sm font-extrabold text-[var(--text-main)]">
+                          ₹{prod.unit_price}
+                        </span>
+                        <span className="text-[10px] font-mono text-[var(--text-dim)] font-bold">
+                          Stock: {prod.current_stock}
                         </span>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[10px] text-[var(--text-muted)]">Stock:</span>
-                        <span className="text-xs font-semibold font-mono ml-1 text-[var(--text-main)]">
-                          {p.current_stock} {p.unit}
-                        </span>
+
+                      <div className="p-1 rounded-[2px] bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] group-hover:border-[var(--border-strong)] transition-all">
+                        <Plus size={13} className="stroke-[2.5]" />
                       </div>
                     </div>
                   </div>
@@ -323,74 +639,351 @@ export default function POS() {
         </div>
       </div>
 
-      {/* ── RIGHT PANEL (40%): Cart & Fast Checkout ── */}
-      <div className="flex-[2] flex flex-col os-surface overflow-hidden">
+      {/* ── Right Column: Live Checkout Docket & Customer Information Step ── */}
+      <div className="w-full lg:w-[420px] flex flex-col card p-0 border-2 border-[var(--border-color)] overflow-hidden bg-[var(--bg-surface)] shrink-0 shadow-[4px_4px_0px_var(--border-color)]">
         {/* Cart Header */}
-        <div className="p-4 border-b border-[var(--border-color)] flex items-center justify-between bg-[var(--bg-surface)]">
+        <div className="p-3 border-b border-[var(--border-color)] bg-[var(--bg-surface-elevated)] flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Receipt size={17} className="text-blue-500" />
-            <span className="font-bold text-xs uppercase tracking-wider text-[var(--text-main)]">Current Bill</span>
-            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 font-semibold">
-              {cart.reduce((total, i) => total + i.quantity, 0)} items
+            <Receipt size={16} className="text-[var(--accent)]" />
+            <h3 className="font-bold text-xs text-[var(--text-main)] uppercase font-mono">
+              Billing Docket
+            </h3>
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] font-semibold">
+              {cart.reduce((a, b) => a + b.quantity, 0)} items
             </span>
           </div>
+
           {cart.length > 0 && (
             <button
               onClick={clearCart}
-              className="text-[11px] text-[var(--text-muted)] hover:text-red-500 flex items-center gap-1 transition-colors cursor-pointer"
+              className="text-[10px] font-mono text-red-500 hover:underline cursor-pointer"
             >
-              <RotateCcw size={12} />
-              Clear (Esc)
+              Clear Cart
             </button>
           )}
         </div>
 
+        {/* ── SECTION: CUSTOMER INFORMATION FORM BEFORE BILL GENERATION ── */}
+        {customerSettings.enabled && (
+          <div className="p-3.5 border-b-2 border-[var(--border-color)] bg-[var(--bg-surface-elevated)] space-y-2.5 text-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Contact size={15} className="text-[var(--accent)]" />
+                <h4 className="font-extrabold text-xs text-[var(--text-main)] font-display uppercase tracking-tight">
+                  Customer Information
+                </h4>
+              </div>
+
+              {/* Validation Status Pill */}
+              <span
+                className={`text-[9px] font-mono px-2 py-0.5 rounded font-bold border uppercase tracking-wider ${
+                  isCustomerInfoValid
+                    ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/40'
+                    : 'bg-amber-500/15 text-amber-500 border-amber-500/40 animate-pulse'
+                }`}
+              >
+                {isCustomerInfoValid ? '✓ Validated' : '⚠ Required info needed'}
+              </span>
+            </div>
+
+            {/* Selection Mode Tabs: Walk-in (if permitted) | Existing Customer | Add New */}
+            <div className="grid grid-cols-3 gap-1 bg-[var(--bg-surface)] p-1 rounded border border-[var(--border-color)] text-[10px] font-mono">
+              {/* Tab 1: Walk-in */}
+              <button
+                type="button"
+                disabled={!isWalkInPermitted}
+                onClick={() => {
+                  setCustomerMode('walk_in')
+                  setSelectedCustomer(null)
+                }}
+                className={`py-1 px-1.5 rounded font-bold transition-all text-center truncate ${
+                  customerMode === 'walk_in'
+                    ? 'bg-[var(--accent)] text-[var(--accent-ink)] shadow-[1px_1px_0px_var(--border-strong)]'
+                    : isWalkInPermitted
+                    ? 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                    : 'text-[var(--text-dim)] opacity-40 cursor-not-allowed'
+                }`}
+                title={!isWalkInPermitted ? 'Walk-in is disabled when required customer fields are configured' : 'Fast anonymous checkout'}
+              >
+                Walk-in {!isWalkInPermitted && '(Locked)'}
+              </button>
+
+              {/* Tab 2: Existing Search */}
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomerMode('select')
+                  setShowCustomerSearch(true)
+                }}
+                className={`py-1 px-1.5 rounded font-bold transition-all text-center truncate ${
+                  customerMode === 'select'
+                    ? 'bg-[var(--accent)] text-[var(--accent-ink)] shadow-[1px_1px_0px_var(--border-strong)]'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                }`}
+              >
+                Existing
+              </button>
+
+              {/* Tab 3: New Customer */}
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomerMode('new')
+                  setSelectedCustomer(null)
+                }}
+                className={`py-1 px-1.5 rounded font-bold transition-all text-center truncate ${
+                  customerMode === 'new'
+                    ? 'bg-[var(--accent)] text-[var(--accent-ink)] shadow-[1px_1px_0px_var(--border-strong)]'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                }`}
+              >
+                + New Client
+              </button>
+            </div>
+
+            {/* Mode 1: Walk-in Notice */}
+            {customerMode === 'walk_in' && (
+              <div className="p-2.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[11px] flex items-center justify-between">
+                <span className="font-mono text-[10px] text-[var(--text-muted)] uppercase">
+                  Anonymous Walk-in Billing Permitted
+                </span>
+                <span className="text-emerald-500 text-[10px] font-bold font-mono">● Ready</span>
+              </div>
+            )}
+
+            {/* Mode 2: Existing Customer Search & Selection */}
+            {customerMode === 'select' && (
+              <div className="space-y-2">
+                {selectedCustomer ? (
+                  <div className="p-2.5 rounded bg-[var(--bg-surface)] border-2 border-emerald-500/50 space-y-1.5 shadow-[2px_2px_0px_rgba(16,185,129,0.3)]">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center font-bold text-[10px] shrink-0">
+                          <UserCheck size={13} />
+                        </div>
+                        <div className="truncate">
+                          <div className="font-bold text-xs text-[var(--text-main)] truncate">
+                            {selectedCustomer.full_name || 'Customer'}
+                          </div>
+                          <div className="text-[10px] font-mono text-[var(--text-muted)] truncate">
+                            {selectedCustomer.phone || selectedCustomer.email || 'Registered Client'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={handleOpenEditModal}
+                          className="p-1 rounded bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-dim)] hover:text-[var(--text-main)] cursor-pointer"
+                          title="Edit Customer Information"
+                        >
+                          <Edit2 size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleClearCustomer}
+                          className="p-1 rounded bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-dim)] hover:text-red-500 cursor-pointer"
+                          title="Unlink Customer"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Validation Errors for Selected Customer */}
+                    {selectedCustomerValidationErrors.length > 0 && (
+                      <div className="p-2 rounded bg-red-500/10 border border-red-500/40 text-[10px] text-red-500 font-mono space-y-0.5">
+                        <div className="font-bold flex items-center gap-1">
+                          <ShieldAlert size={12} />
+                          <span>Missing Required Information:</span>
+                        </div>
+                        {selectedCustomerValidationErrors.map((err, i) => (
+                          <div key={i}>• {err}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div className="flex items-center gap-1.5 bg-[var(--bg-surface)] border-2 border-[var(--border-color)] rounded p-1.5 focus-within:border-[var(--accent)]">
+                      <Search size={13} className="text-[var(--text-dim)] shrink-0" />
+                      <input
+                        type="text"
+                        placeholder="Search existing customer by name or phone..."
+                        value={customerSearch}
+                        onChange={(e) => {
+                          setCustomerSearch(e.target.value)
+                          setShowCustomerSearch(true)
+                        }}
+                        onFocus={() => setShowCustomerSearch(true)}
+                        className="w-full bg-transparent border-none text-[11px] font-mono text-[var(--text-main)] focus:outline-none"
+                      />
+                      {customerSearch && (
+                        <button onClick={() => setCustomerSearch('')} className="text-[var(--text-dim)]">
+                          <X size={11} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Autocomplete Dropdown */}
+                    {showCustomerSearch && customerResults.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-[var(--bg-surface)] border-2 border-[var(--border-strong)] rounded shadow-2xl z-30 max-h-48 overflow-y-auto divide-y divide-[var(--border-color)]">
+                        {customerResults.map((c) => (
+                          <div
+                            key={c.id}
+                            onClick={() => handleSelectCustomer(c)}
+                            className="p-2 hover:bg-[var(--accent)] hover:text-[var(--accent-ink)] cursor-pointer transition-colors flex items-center justify-between text-[11px] group"
+                          >
+                            <div className="min-w-0">
+                              <div className="font-bold truncate">{c.full_name || 'Customer'}</div>
+                              <div className="text-[10px] font-mono opacity-80">{c.phone || c.email}</div>
+                            </div>
+                            <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] group-hover:border-transparent">
+                              Select
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {showCustomerSearch && customerSearch.length >= 2 && !searchingCustomer && customerResults.length === 0 && (
+                      <div className="p-2 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded mt-1 text-[10px] font-mono text-[var(--text-muted)] text-center">
+                        No customer matching "{customerSearch}".
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Mode 3: Add New Customer Form (Dynamically Renders ONLY Enabled Fields) */}
+            {customerMode === 'new' && (
+              <div className="space-y-2 p-2.5 rounded bg-[var(--bg-surface)] border-2 border-[var(--border-color)]">
+                <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--text-dim)] border-b border-[var(--border-subtle)] pb-1 flex items-center justify-between">
+                  <span>Enter Customer Details</span>
+                  <span className="text-red-500 text-[9px]">* Required by store</span>
+                </div>
+
+                <div className="space-y-2 text-[11px]">
+                  {customerSettings.enabled_fields?.map((fieldKey) => {
+                    const meta = FIELD_CONFIG_METADATA[fieldKey]
+                    if (!meta) return null
+                    const isRequired = customerSettings.required_fields?.includes(fieldKey)
+                    const errorMsg = newCustomerValidationErrors[fieldKey]
+                    const isTouched = touchedFields[fieldKey]
+
+                    return (
+                      <div key={fieldKey} className="space-y-0.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] text-[var(--text-muted)] font-medium">
+                            {meta.label} {isRequired ? <span className="text-red-500 font-bold">*</span> : <span className="text-[9px] text-[var(--text-dim)]">(Optional)</span>}
+                          </label>
+                          {isTouched && errorMsg && (
+                            <span className="text-[9px] font-mono text-red-500 font-bold">
+                              {errorMsg}
+                            </span>
+                          )}
+                        </div>
+
+                        <input
+                          type={meta.type}
+                          placeholder={meta.placeholder}
+                          value={newCustomerForm[fieldKey] || ''}
+                          onChange={(e) => {
+                            setNewCustomerForm({ ...newCustomerForm, [fieldKey]: e.target.value })
+                            setTouchedFields({ ...touchedFields, [fieldKey]: true })
+                          }}
+                          onBlur={() => setTouchedFields({ ...touchedFields, [fieldKey]: true })}
+                          className={`w-full p-1.5 rounded bg-[var(--bg-surface-elevated)] border text-[11px] text-[var(--text-main)] font-mono focus:outline-none transition-colors ${
+                            isTouched && errorMsg
+                              ? 'border-red-500 focus:border-red-500 bg-red-500/5'
+                              : 'border-[var(--border-color)] focus:border-[var(--accent)]'
+                          }`}
+                        />
+                      </div>
+                    )
+                  })}
+
+                  {/* Customer Consent Checkbox */}
+                  {customerSettings.require_consent && (
+                    <div className="pt-1">
+                      <label className="flex items-start gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newCustomerForm.consent_given}
+                          onChange={(e) => {
+                            setNewCustomerForm({ ...newCustomerForm, consent_given: e.target.checked })
+                            setTouchedFields({ ...touchedFields, consent: true })
+                          }}
+                          className="mt-0.5 rounded text-[var(--accent)]"
+                        />
+                        <span className="text-[10px] text-[var(--text-main)]">
+                          Customer agrees to record contact details for digital invoice & SMS <span className="text-red-500 font-bold">*</span>
+                        </span>
+                      </label>
+                      {touchedFields.consent && newCustomerValidationErrors.consent && (
+                        <div className="text-[9px] font-mono text-red-500 font-bold mt-0.5">
+                          {newCustomerValidationErrors.consent}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Cart Items List */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {cart.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 text-[var(--text-muted)]">
-              <Receipt size={32} className="mb-2 opacity-30" />
-              <p className="text-xs font-medium">Cart is empty</p>
-              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Click any product to add to cart</p>
+            <div className="h-full flex flex-col items-center justify-center text-[var(--text-dim)] py-8 gap-2 text-center">
+              <Receipt size={24} className="opacity-40" />
+              <p className="text-xs font-medium">Cart docket is empty.</p>
+              <span className="text-[10px] max-w-[200px]">
+                Click any product on the catalog grid or scan barcode to add.
+              </span>
             </div>
           ) : (
             cart.map((item) => (
               <div
                 key={item.product_id}
-                className="p-2.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface-elevated)] flex items-center justify-between gap-3 text-xs"
+                className="p-2.5 rounded border border-[var(--border-color)] bg-[var(--bg-surface-elevated)] flex items-center justify-between gap-2"
               >
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-[var(--text-main)] truncate">{item.name}</div>
-                  <div className="text-[11px] text-[var(--text-muted)] font-mono">
-                    ₹{item.unit_price.toFixed(2)} × {item.quantity}
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold text-xs text-[var(--text-main)] truncate">
+                    {item.name}
+                  </div>
+                  <div className="text-[10px] font-mono text-[var(--text-dim)] mt-0.5">
+                    ₹{item.unit_price} × {item.quantity} = ₹{item.subtotal.toFixed(2)}
                   </div>
                 </div>
 
-                {/* Quantity Controls */}
-                <div className="flex items-center gap-1.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-md px-1 py-0.5">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     onClick={() => updateQuantity(item.product_id, -1)}
-                    className="p-1 text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
+                    className="p-1 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--border-strong)]"
                   >
-                    <Minus size={12} />
+                    <Minus size={11} />
                   </button>
-                  <span className="w-6 text-center font-mono font-semibold">{item.quantity}</span>
+
+                  <span className="font-mono text-xs font-bold w-6 text-center">
+                    {item.quantity}
+                  </span>
+
                   <button
                     onClick={() => updateQuantity(item.product_id, 1)}
-                    className="p-1 text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
+                    className="p-1 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--border-strong)]"
                   >
-                    <Plus size={12} />
+                    <Plus size={11} />
                   </button>
-                </div>
 
-                {/* Subtotal & Delete */}
-                <div className="text-right flex items-center gap-2">
-                  <span className="font-bold font-mono text-[var(--text-main)]">₹{item.subtotal.toFixed(2)}</span>
                   <button
                     onClick={() => removeFromCart(item.product_id)}
-                    className="text-[var(--text-muted)] hover:text-red-500 cursor-pointer p-1"
+                    className="p-1 rounded text-red-500 hover:bg-red-500/10 ml-1"
                   >
-                    <Trash2 size={13} />
+                    <Trash2 size={12} />
                   </button>
                 </div>
               </div>
@@ -398,110 +991,236 @@ export default function POS() {
           )}
         </div>
 
-        {/* Cart Calculation & Payment Footer */}
-        <div className="p-4 border-t border-[var(--border-color)] bg-[var(--bg-surface)] space-y-3">
-          {/* GST Selection */}
+        {/* Calculation & Settlement Controls */}
+        <div className="p-3.5 border-t-2 border-[var(--border-color)] bg-[var(--bg-surface-elevated)] space-y-3">
+          {/* Tax rate selector */}
           <div className="flex items-center justify-between text-xs">
-            <span className="text-[var(--text-muted)]">GST Slab:</span>
-            <div className="flex items-center gap-1">
-              {[0, 0.05, 0.12, 0.18, 0.28].map((rate) => (
+            <span className="text-[var(--text-muted)] font-mono uppercase font-bold tracking-wider text-[11px]">GST Rate:</span>
+            <div className="flex gap-1">
+              {[
+                { label: '0%', val: 0.0 },
+                { label: '5%', val: 0.05 },
+                { label: '12%', val: 0.12 },
+                { label: '18%', val: 0.18 },
+              ].map((t) => (
                 <button
-                  key={rate}
-                  onClick={() => setTaxRate(rate)}
-                  className={`px-2 py-0.5 rounded text-[11px] font-mono font-medium cursor-pointer ${
-                    taxRate === rate
-                      ? 'bg-blue-600 text-white font-bold'
-                      : 'bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-muted)]'
+                  key={t.val}
+                  onClick={() => setTaxRate(t.val)}
+                  className={`px-2 py-0.5 rounded-[2px] text-[11px] font-mono cursor-pointer font-bold transition-all ${
+                    taxRate === t.val
+                      ? 'bg-[var(--accent)] text-[var(--accent-ink)] border border-[var(--border-strong)] shadow-[1px_1px_0px_var(--border-strong)]'
+                      : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border border-[var(--border-color)]'
                   }`}
                 >
-                  {(rate * 100).toFixed(0)}%
+                  {t.label}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Subtotal & Tax */}
-          <div className="space-y-1 text-xs pt-1 border-t border-[var(--border-color)]">
+          {/* Subtotal & Tax Breakup */}
+          <div className="space-y-1 text-xs border-t border-[var(--border-subtle)] pt-2 font-mono">
             <div className="flex justify-between text-[var(--text-muted)]">
-              <span>Items Subtotal:</span>
-              <span className="font-mono">₹{subtotal.toFixed(2)}</span>
+              <span className="font-sans font-medium">Subtotal:</span>
+              <span className="font-bold">₹{subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-[var(--text-muted)]">
-              <span>GST ({(taxRate * 100).toFixed(0)}%):</span>
-              <span className="font-mono">₹{taxAmount.toFixed(2)}</span>
+              <span className="font-sans font-medium">GST ({(taxRate * 100).toFixed(0)}%):</span>
+              <span className="font-bold">₹{taxAmount.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-sm font-bold text-[var(--text-main)] pt-1 border-t border-[var(--border-color)]">
-              <span>Total Payable:</span>
-              <span className="font-mono text-base text-blue-500">₹{grandTotal.toFixed(2)}</span>
+            <div className="flex justify-between text-sm font-extrabold text-[var(--text-main)] pt-1 border-t-2 border-[var(--border-color)]">
+              <span className="font-display uppercase tracking-tight">Grand Total:</span>
+              <span className="font-mono text-base font-extrabold text-[var(--text-main)] bg-[var(--accent)] px-1.5 py-0.2 rounded-[2px] border border-[var(--border-strong)]">
+                ₹{grandTotal.toFixed(2)}
+              </span>
             </div>
           </div>
 
           {/* Payment Method Selector */}
-          <div className="grid grid-cols-3 gap-2 pt-1">
-            {[
-              { id: 'UPI', label: 'UPI / QR', icon: QrCode },
-              { id: 'Cash', label: 'Cash', icon: Banknote },
-              { id: 'Card', label: 'Card', icon: CreditCard },
-            ].map((pm) => {
-              const Icon = pm.icon
-              const isSelected = paymentMethod === pm.id
-              return (
-                <button
-                  key={pm.id}
-                  onClick={() => setPaymentMethod(pm.id)}
-                  className={`py-2 px-1 rounded-lg border text-xs font-semibold flex flex-col items-center gap-1 transition-all cursor-pointer ${
-                    isSelected
-                      ? 'border-blue-500 bg-blue-500/10 text-blue-500'
-                      : 'border-[var(--border-color)] bg-[var(--bg-surface-elevated)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                  }`}
-                >
-                  <Icon size={14} />
-                  <span>{pm.label}</span>
-                </button>
-              )
-            })}
+          <div className="space-y-1.5 pt-1">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--text-dim)] font-bold block">
+              Payment Settlement
+            </span>
+            <div className="grid grid-cols-3 gap-1.5">
+              {[
+                { id: 'UPI', label: 'UPI / QR', icon: QrCode },
+                { id: 'Cash', label: 'Cash', icon: Banknote },
+                { id: 'Card', label: 'Card', icon: CreditCard },
+              ].map((m) => {
+                const Icon = m.icon
+                const isActive = paymentMethod === m.id
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => setPaymentMethod(m.id)}
+                    className={`py-2 px-1 rounded-[3px] border-2 text-xs font-bold uppercase tracking-wider flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                      isActive
+                        ? 'border-[var(--border-strong)] bg-[var(--accent)] text-[var(--accent-ink)] shadow-[2px_2px_0px_var(--border-strong)]'
+                        : 'border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-muted)] hover:border-[var(--border-strong)]'
+                    }`}
+                  >
+                    <Icon size={14} className="stroke-[2.2]" />
+                    <span>{m.label}</span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
-          {/* Generate Bill Button */}
+          {/* Contextual Payment Detail */}
+          {paymentMethod === 'Cash' && (
+            <div className="p-2.5 rounded-[3px] bg-[var(--bg-surface)] border-2 border-[var(--border-color)] text-xs space-y-1.5 shadow-[1px_1px_0px_var(--border-color)]">
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--text-muted)] font-mono font-bold text-[11px] uppercase">Cash Received:</span>
+                <input
+                  type="number"
+                  placeholder="0.00"
+                  value={cashTendered}
+                  onChange={(e) => setCashTendered(e.target.value)}
+                  className="w-24 p-1 rounded-[2px] bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-right font-mono text-xs font-bold focus:outline-none focus:border-[var(--accent)]"
+                />
+              </div>
+              {Number(cashTendered) > grandTotal && (
+                <div className="flex items-center justify-between text-emerald-600 font-bold font-mono text-xs pt-1 border-t border-[var(--border-subtle)]">
+                  <span className="uppercase text-[10px]">Change Due:</span>
+                  <span>₹{changeDue.toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {paymentMethod === 'UPI' && (
+            <div className="p-2 rounded-[3px] bg-[var(--bg-surface)] border border-[var(--border-color)] text-xs flex items-center justify-between">
+              <span className="text-[var(--text-muted)] text-[11px] font-mono">Instant UPI QR generated on print</span>
+              <span className="font-mono text-[10px] text-emerald-600 font-bold uppercase tracking-wide">● Ready</span>
+            </div>
+          )}
+
+          {/* Validation Banner when disabled */}
+          {!isCustomerInfoValid && cart.length > 0 && (
+            <div className="p-2 rounded bg-amber-500/10 border border-amber-500/30 text-[10px] text-amber-500 font-mono flex items-center gap-1.5">
+              <AlertTriangle size={13} className="shrink-0" />
+              <span>
+                {customerMode === 'walk_in' && !isWalkInPermitted
+                  ? 'Walk-in locked: Store policy mandates customer information.'
+                  : customerMode === 'select' && selectedCustomerValidationErrors.length > 0
+                  ? selectedCustomerValidationErrors[0]
+                  : 'Complete mandatory customer details above to enable bill generation.'}
+              </span>
+            </div>
+          )}
+
+          {/* Checkout Submit Button (Disabled until cart has items and customer info validates) */}
           <button
             onClick={handleCheckout}
-            disabled={submitting || cart.length === 0}
-            className="w-full btn-accent py-3 text-xs font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-lg shadow-blue-500/20"
+            disabled={cart.length === 0 || submitting || !isCustomerInfoValid}
+            className={`w-full py-3 text-xs font-bold tracking-wider uppercase cursor-pointer shadow-[3px_3px_0px_var(--border-strong)] transition-all ${
+              cart.length === 0 || submitting || !isCustomerInfoValid
+                ? 'opacity-40 cursor-not-allowed bg-zinc-700 text-zinc-300 border-2 border-zinc-600'
+                : 'btn-accent'
+            }`}
           >
-            {submitting ? 'Generating Bill...' : `Generate Bill (₹${grandTotal.toFixed(2)})`}
+            {submitting ? (
+              <span>Validating & Recording Bill...</span>
+            ) : (
+              <span className="flex items-center justify-center gap-2">
+                <span>Charge ₹{grandTotal.toFixed(2)} & Generate Bill</span>
+                <ArrowRight size={14} className="stroke-[2.5]" />
+              </span>
+            )}
           </button>
         </div>
       </div>
-      </div>
 
-      {/* ── SHORTCUT HINT BAR AT BOTTOM ── */}
-      <div className="flex items-center justify-between px-4 py-2 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg text-xs font-mono text-[var(--text-muted)] shrink-0">
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5">
-            <kbd className="bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] px-1.5 py-0.5 rounded font-bold text-[var(--text-main)]">[F2]</kbd>
-            <span>Search</span>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <kbd className="bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] px-1.5 py-0.5 rounded font-bold text-[var(--text-main)]">[Esc]</kbd>
-            <span>Clear</span>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <kbd className="bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] px-1.5 py-0.5 rounded font-bold text-[var(--text-main)]">[Ctrl+P]</kbd>
-            <span>Print</span>
-          </span>
+      {/* ── Receipt Print Modal ── */}
+      {showBillModal && completedBill && (
+        <PrintModal
+          bill={completedBill}
+          storeSettings={storeSettings}
+          cashierName={user?.name || 'Cashier'}
+          isOpen={showBillModal}
+          onClose={() => setShowBillModal(false)}
+          autoPrint={true}
+        />
+      )}
+
+      {/* ── MODAL: EDIT CUSTOMER DETAILS ── */}
+      {showEditModal && selectedCustomer && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="os-surface max-w-sm w-full p-5 relative border-2 border-[var(--border-strong)] shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-2 mb-3">
+              <div className="flex items-center gap-2">
+                <Edit2 size={15} className="text-[var(--accent)]" />
+                <h3 className="font-bold text-xs text-[var(--text-main)] uppercase font-display">
+                  Edit Customer Information
+                </h3>
+              </div>
+              <button onClick={() => setShowEditModal(false)} className="text-[var(--text-dim)] hover:text-[var(--text-main)]">
+                <X size={14} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditCustomer} className="space-y-3 text-xs">
+              <div>
+                <label className="text-[10px] text-[var(--text-muted)] font-medium block mb-1">Full Name</label>
+                <input
+                  type="text"
+                  value={editCustomerForm.full_name || ''}
+                  onChange={(e) => setEditCustomerForm({ ...editCustomerForm, full_name: e.target.value })}
+                  className="w-full p-2 rounded bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] text-xs focus:outline-none focus:border-[var(--accent)]"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-[var(--text-muted)] font-medium block mb-1">Mobile Number</label>
+                <input
+                  type="tel"
+                  value={editCustomerForm.phone || ''}
+                  onChange={(e) => setEditCustomerForm({ ...editCustomerForm, phone: e.target.value })}
+                  className="w-full p-2 rounded bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] font-mono text-xs focus:outline-none focus:border-[var(--accent)]"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-[var(--text-muted)] font-medium block mb-1">Email Address</label>
+                <input
+                  type="email"
+                  value={editCustomerForm.email || ''}
+                  onChange={(e) => setEditCustomerForm({ ...editCustomerForm, email: e.target.value })}
+                  className="w-full p-2 rounded bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] text-xs focus:outline-none focus:border-[var(--accent)]"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-[var(--text-muted)] font-medium block mb-1">Billing Address</label>
+                <input
+                  type="text"
+                  value={editCustomerForm.billing_address || ''}
+                  onChange={(e) => setEditCustomerForm({ ...editCustomerForm, billing_address: e.target.value })}
+                  className="w-full p-2 rounded bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] text-xs focus:outline-none focus:border-[var(--accent)]"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-[var(--border-subtle)]">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="btn-ghost text-xs py-1.5 px-3 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="btn-accent text-xs py-1.5 px-4 cursor-pointer font-bold"
+                >
+                  {savingEdit ? 'Saving...' : 'Update Details'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-        <span className="hidden md:inline text-[11px] text-[var(--text-muted)]">Thermal 80mm Active</span>
-      </div>
-
-      {/* ── 80MM THERMAL RECEIPT PRINT MODAL ── */}
-      <PrintModal
-        bill={completedBill}
-        storeSettings={storeSettings}
-        cashierName={completedBill?.employee_name || user?.name}
-        isOpen={showBillModal}
-        onClose={() => setShowBillModal(false)}
-        autoPrint={true}
-      />
+      )}
     </motion.div>
   )
 }

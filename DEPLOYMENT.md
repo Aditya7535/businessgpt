@@ -71,7 +71,25 @@ You can use **Neon.tech** or **Supabase**:
    - `NEWSAPI_KEY`: *(Optional)*
    - `CORS_ORIGINS`: `*`
    - `FRONTEND_URL`: `https://your-frontend-url.vercel.app` (update after Step 3)
+   - `TWILIO_ACCOUNT_SID`: `AC...` (from Twilio Console)
+   - `TWILIO_AUTH_TOKEN`: `...` (from Twilio Console)
+   - `TWILIO_WHATSAPP_NUMBER`: `whatsapp:+14155238886`
+   - `WHATSAPP_WEBHOOK_BASE_URL`: `https://businessgpt-backend.onrender.com` (your backend URL)
 6. Click **Deploy Web Service**. Once deployed, copy your backend URL (e.g. `https://businessgpt-backend.onrender.com`).
+
+---
+
+### Step 2B: Configure Inbound WhatsApp Webhook in Twilio
+To enable two-way conversational AI on WhatsApp:
+1. Open the [Twilio Console](https://console.twilio.com/).
+2. Navigate to **Develop** $\rightarrow$ **Messaging** $\rightarrow$ **Try it out** $\rightarrow$ **Send a WhatsApp message** $\rightarrow$ **Sandbox settings**.
+3. Under **"WHEN A MESSAGE COMES IN"**:
+   - URL: `https://<YOUR-BACKEND-DOMAIN>/api/whatsapp/webhook` (e.g. `https://businessgpt-backend.onrender.com/api/whatsapp/webhook`)
+   - Method: `HTTP POST`
+4. Under **"STATUS CALLBACK URL"** (optional):
+   - Leave default or blank.
+5. Click **Save**.
+6. Send `"Aaj ki total sales kitni hui?"` from WhatsApp to verify the incoming message triggers BusinessGPT!
 
 ---
 

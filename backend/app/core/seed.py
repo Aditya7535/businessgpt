@@ -13,14 +13,15 @@ from app.models.stock_transaction import StockTransaction
 from app.models.sales_data import SalesData
 from app.models.alert import Alert
 from app.models.store_setting import StoreSetting
+from app.models.customer import Customer, CustomerSetting
 
 logger = logging.getLogger("businessgpt.seed")
 
 
 DEFAULT_USERS = [
-    {"name": "Aditya (Owner)", "role": "OWNER", "pin": "1111", "phone": "+919876543210"},
-    {"name": "Rajesh (Manager)", "role": "MANAGER", "pin": "2222", "phone": "+919876543211"},
-    {"name": "Pooja (Counter)", "role": "EMPLOYEE", "pin": "3333", "phone": "+919876543212"},
+    {"name": "Aditya (Owner)", "role": "OWNER", "pin": "1111", "phone": "+919876543210", "store_id": 1},
+    {"name": "Rajesh (Manager)", "role": "MANAGER", "pin": "2222", "phone": "+919876543211", "store_id": 1},
+    {"name": "Pooja (Counter)", "role": "EMPLOYEE", "pin": "3333", "phone": "+919876543212", "store_id": 1},
 ]
 
 DEFAULT_PRODUCTS = [
@@ -143,6 +144,9 @@ def _ensure_schema_migrations(eng):
                 cols = [r[1] for r in conn.execute(text("PRAGMA table_info(users)")).fetchall()]
                 if "phone" not in cols:
                     conn.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(30)"))
+                if "store_id" not in cols:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN store_id INTEGER DEFAULT 1"))
+
                 wa_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(whatsapp_registrations)")).fetchall()]
                 if "user_id" not in wa_cols:
                     conn.execute(text("ALTER TABLE whatsapp_registrations ADD COLUMN user_id INTEGER"))
@@ -152,13 +156,20 @@ def _ensure_schema_migrations(eng):
                     conn.execute(text("ALTER TABLE whatsapp_registrations ADD COLUMN opt_in_alerts BOOLEAN DEFAULT 1"))
                 if "last_digest_date" not in wa_cols:
                     conn.execute(text("ALTER TABLE whatsapp_registrations ADD COLUMN last_digest_date VARCHAR(20)"))
+
+                bill_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(bills)")).fetchall()]
+                if "customer_id" not in bill_cols:
+                    conn.execute(text("ALTER TABLE bills ADD COLUMN customer_id INTEGER"))
+
                 conn.commit()
             else:
                 conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(30)"))
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS store_id INTEGER DEFAULT 1"))
                 conn.execute(text("ALTER TABLE whatsapp_registrations ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL"))
                 conn.execute(text("ALTER TABLE whatsapp_registrations ADD COLUMN IF NOT EXISTS opt_in_digest BOOLEAN DEFAULT TRUE"))
                 conn.execute(text("ALTER TABLE whatsapp_registrations ADD COLUMN IF NOT EXISTS opt_in_alerts BOOLEAN DEFAULT TRUE"))
                 conn.execute(text("ALTER TABLE whatsapp_registrations ADD COLUMN IF NOT EXISTS last_digest_date VARCHAR(20)"))
+                conn.execute(text("ALTER TABLE bills ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL"))
                 conn.commit()
     except Exception as e:
         logger.warning(f"Schema migration warning: {e}")
@@ -166,7 +177,7 @@ def _ensure_schema_migrations(eng):
 def seed_database():
     """
     Idempotent database seeder.
-    Creates schema tables and seeds initial users, products, sales_data, and alerts if empty.
+    Creates schema tables and seeds initial users, products, sales_data, alerts, and settings if empty.
     """
     Base.metadata.create_all(bind=engine)
     _ensure_schema_migrations(engine)
@@ -182,7 +193,8 @@ def seed_database():
                     name=u["name"],
                     role=u["role"],
                     pin=hash_pin(u["pin"]),
-                    phone=u.get("phone")
+                    phone=u.get("phone"),
+                    store_id=u.get("store_id", 1)
                 ))
             db.commit()
             logger.info("Users seeded successfully.")
@@ -311,6 +323,23 @@ def seed_database():
                 db.add(StoreSetting(key=k, value=val_str))
             db.commit()
             logger.info("Store settings seeded successfully.")
+
+        # 7. Seed Customer Settings (Store 1)
+        cust_settings = db.query(CustomerSetting).filter(CustomerSetting.store_id == 1).first()
+        if not cust_settings:
+            logger.info("Seeding initial customer settings...")
+            db.add(CustomerSetting(
+                store_id=1,
+                enabled=False,
+                allow_walk_in=True,
+                customer_selection_optional=True,
+                save_purchase_history=False,
+                require_consent=False,
+                enabled_fields='["full_name", "phone"]',
+                required_fields='[]'
+            ))
+            db.commit()
+            logger.info("Customer settings seeded successfully.")
 
     except Exception as e:
         db.rollback()

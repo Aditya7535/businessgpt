@@ -57,15 +57,23 @@ def verify_twilio_signature(request: Request, form_dict: dict) -> bool:
         if host:
             path_and_query = request.url.path + (f"?{request.url.query}" if request.url.query else "")
             candidate_urls.append(f"{proto}://{host}{path_and_query}")
+            if proto == "http":
+                candidate_urls.append(f"https://{host}{path_and_query}")
 
         # 3. Explicitly configured webhook base URL (e.g. ngrok or production domain)
         if settings.WHATSAPP_WEBHOOK_BASE_URL:
-            base = settings.WHATSAPP_WEBHOOK_BASE_URL.rstrip('/')
-            candidate_urls.append(f"{base}/api/whatsapp/webhook")
-            candidate_urls.append(f"{base}/api/whatsapp/webhook/")
+            configured_url = settings.WHATSAPP_WEBHOOK_BASE_URL.rstrip('/')
+            candidate_urls.append(configured_url)
+            candidate_urls.append(f"{configured_url}/")
 
-        # Validate against candidate URLs
-        for url in candidate_urls:
+            # Extract base host if user provided full path
+            import re
+            base_domain = re.sub(r'/api/whatsapp/webhook/?$', '', configured_url, flags=re.IGNORECASE)
+            candidate_urls.append(f"{base_domain}/api/whatsapp/webhook")
+            candidate_urls.append(f"{base_domain}/api/whatsapp/webhook/")
+
+        # Validate against unique candidate URLs
+        for url in list(dict.fromkeys(candidate_urls)):
             if validator.validate(url, form_dict, signature):
                 return True
 
@@ -79,6 +87,7 @@ def verify_twilio_signature(request: Request, form_dict: dict) -> bool:
 
 # ─── 1. Twilio Incoming Webhook ──────────────────────────────
 @router.post("/webhook")
+@router.post("/webhook/")
 async def whatsapp_webhook(
     request: Request,
     db: Session = Depends(get_db),
@@ -312,13 +321,27 @@ async def broadcast_alert(
     }
 
 
-# ─── 7. Test Message Endpoint (Local Dev / Offline Testing) ──
+# ─── 7. Test Message Endpoint ──────────────────────────────
 @router.post("/test")
 async def test_message(
     message: str,
     phone: str = "+919876543210",
     db: Session = Depends(get_db)
 ):
-    """Test the complete message handler without invoking Twilio network."""
-    responses = await process_message(phone, message, db)
-    return {"phone": phone, "message": message, "responses": responses}
+    """Dispatch a test WhatsApp message to the specified phone number."""
+    clean_phone = normalize_phone_number(phone)
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Twilio credentials are not configured in backend/.env. Please configure TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN to enable WhatsApp delivery."
+        )
+
+    try:
+        send_whatsapp_message(to=clean_phone, text=message)
+        return {"status": "dispatched", "phone": clean_phone, "message": message}
+    except Exception as e:
+        logger.error(f"Failed to dispatch test WhatsApp message to {clean_phone}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Twilio delivery failed: {str(e)}"
+        )

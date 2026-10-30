@@ -1,4 +1,4 @@
-from typing import Dict, TypedDict, Any
+from typing import Dict, TypedDict, Any, Optional
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import SystemMessage
 from datetime import datetime
@@ -12,19 +12,25 @@ from app.core.database import SessionLocal
 from app.models.dataset import Dataset
 
 # Define the state dictionary
-class GraphState(TypedDict):
+class GraphState(TypedDict, total=False):
     query: str
     intent: str
     context: str
     final_response: str
     module_used: str
     confidence: float
+    session_id: Optional[str]
+    store_id: Optional[int]
+    user_id: Optional[int]
+    source: Optional[str]
+    inventory_adjustment: Optional[Dict[str, Any]]
 
 # Nodes
 def classify_node(state: GraphState):
     """Detects intent and sets it in the state."""
     query = state["query"]
-    intent = classify_intent(query)
+    session_id = state.get("session_id")
+    intent = classify_intent(query, session_id=session_id)
     return {"intent": intent, "module_used": intent, "confidence": 0.95}
 
 def sql_node(state: GraphState):
@@ -326,10 +332,51 @@ User Query: {query}
     except Exception as e:
         return {"final_response": f"⚠️ Unexpected error: {str(e)[:200]}"}
 
+def inventory_adjust_node(state: GraphState):
+    """
+    Handles conversational natural language inventory adjustments.
+    Executes preview confirmation calculation or executes confirmed adjustments.
+    """
+    from app.modules.inventory.conversational import handle_conversational_inventory
+    from app.models.user import User
+
+    query = state["query"]
+    session_id = state.get("session_id") or "default_session"
+    store_id = state.get("store_id") or 1
+    user_id = state.get("user_id")
+    source = state.get("source") or "ai_chat"
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == user_id).first() if user_id else None
+        res = handle_conversational_inventory(
+            query=query,
+            session_id=session_id,
+            user=user,
+            store_id=store_id,
+            db=db,
+            source=source
+        )
+        return {
+            "final_response": res.get("response", ""),
+            "module_used": "inventory_adjustment",
+            "inventory_adjustment": res
+        }
+    except Exception as e:
+        return {
+            "final_response": f"⚠️ Inventory update error: {str(e)}",
+            "module_used": "inventory_adjustment",
+            "inventory_adjustment": {"status": "ERROR", "response": str(e)}
+        }
+    finally:
+        db.close()
+
 # Edge router
 def route_intent(state: GraphState):
     intent = state["intent"]
-    if intent == "sql":
+    if intent == "inventory_adjustment":
+        return "inventory_adjust"
+    elif intent == "sql":
         return "sql"
     elif intent == "forecasting":
         return "forecasting"
@@ -352,6 +399,7 @@ workflow.add_node("forecasting", forecasting_node)
 workflow.add_node("inventory", inventory_node)
 workflow.add_node("health", health_node)
 workflow.add_node("alerts", alerts_node)
+workflow.add_node("inventory_adjust", inventory_adjust_node)
 workflow.add_node("synthesize", synthesize_node)
 
 workflow.set_entry_point("classify")
@@ -366,6 +414,7 @@ workflow.add_conditional_edges(
         "inventory": "inventory",
         "health": "health",
         "alerts": "alerts",
+        "inventory_adjust": "inventory_adjust",
     }
 )
 
@@ -375,6 +424,7 @@ workflow.add_edge("forecasting", "synthesize")
 workflow.add_edge("inventory", "synthesize")
 workflow.add_edge("health", "synthesize")
 workflow.add_edge("alerts", "synthesize")
+workflow.add_edge("inventory_adjust", END)
 workflow.add_edge("synthesize", END)
 
 # Compile graph

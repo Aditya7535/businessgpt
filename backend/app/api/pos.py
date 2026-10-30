@@ -1,5 +1,5 @@
-from typing import List, Optional
-from datetime import datetime, date
+from typing import List, Optional, Dict, Any
+from datetime import datetime, date, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -13,6 +13,8 @@ from app.models.stock_transaction import StockTransaction
 from app.models.bill import Bill, BillItem
 from app.models.sales_data import SalesData
 from app.models.alert import Alert
+from app.models.customer import Customer, CustomerSetting
+from app.api.customers import normalize_phone_number, normalize_email_address, is_valid_phone_number, FIELD_LABELS
 
 router = APIRouter(prefix="/pos", tags=["pos"])
 
@@ -28,6 +30,8 @@ class CreateBillRequest(BaseModel):
     payment_method: str = Field(..., description="Cash, UPI, or Card")
     tax_rate: float = Field(0.0, description="GST rate (e.g. 0.05, 0.12, 0.18)")
     notes: Optional[str] = None
+    customer_id: Optional[int] = None
+    customer_data: Optional[Dict[str, Any]] = None
 
 
 class BillItemOut(BaseModel):
@@ -48,6 +52,11 @@ class BillOut(BaseModel):
     status: str
     created_at: datetime
     employee_name: Optional[str] = None
+    customer_id: Optional[int] = None
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
+    customer_email: Optional[str] = None
+    customer_address: Optional[str] = None
     items: List[BillItemOut]
 
 
@@ -98,27 +107,158 @@ def create_bill(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Generate Bill at POS counter:
-    1. Validates stock
-    2. Deducts stock & creates stock_transactions audit log
+    Generate Bill at POS counter with strict validation:
+    1. Validates customer information according to store CRM settings (BEFORE inventory updates)
+    2. Validates stock availability
     3. Calculates subtotals + GST
-    4. Saves Bill and BillItems
-    5. Updates daily pre-aggregated sales_data
-    6. Triggers stock alert if reorder threshold breached
+    4. Generates Bill and BillItems
+    5. Deducts stock & creates stock_transactions audit log
+    6. Updates daily pre-aggregated sales_data
+    7. Triggers stock alert if reorder threshold breached
+    8. Commits transaction atomically
     """
     if not payload.items:
         raise HTTPException(status_code=400, detail="Bill must contain at least one item.")
 
-    # Generate collision-free sequential Bill Number: BGT-YYYY-XXXX
-    current_year = datetime.now().year
-    max_id = db.query(func.max(Bill.id)).scalar() or 0
-    bill_number = f"BGT-{current_year}-{str(max_id + 1).zfill(4)}"
+    store_id = getattr(current_user, "store_id", 1) or 1
+    cust_settings = db.query(CustomerSetting).filter(CustomerSetting.store_id == store_id).first()
 
+    resolved_customer: Optional[Customer] = None
+
+    # ── STEP 1: Strict Customer Information Validation (Before any DB mutations) ──
+    if cust_settings and cust_settings.enabled:
+        enabled_fields = set(cust_settings.enabled_fields_list)
+        required_fields = set(cust_settings.required_fields_list)
+
+        if payload.customer_id:
+            # 1A. Existing customer selected: verify existence in store
+            resolved_customer = db.query(Customer).filter(
+                Customer.id == payload.customer_id,
+                Customer.store_id == store_id
+            ).first()
+            if not resolved_customer:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Selected customer not found in this store."
+                )
+
+            # Verify that the selected customer satisfies all required fields
+            for req in required_fields:
+                val = getattr(resolved_customer, req, None)
+                if not val or not str(val).strip():
+                    label = FIELD_LABELS.get(req, req)
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Selected customer '{resolved_customer.full_name or 'Customer'}' is missing required field '{label}'. Please update customer details before generating bill."
+                    )
+
+            # If phone is present on customer, verify it is valid
+            if resolved_customer.phone and not is_valid_phone_number(resolved_customer.phone):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid phone number for selected customer. Please update customer details."
+                )
+
+        elif payload.customer_data:
+            # 1B. New customer details provided
+            c_data = payload.customer_data
+            consent_val = bool(c_data.get("consent_given", False))
+
+            if cust_settings.require_consent and not consent_val:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Customer consent is required before saving details as per store settings."
+                )
+
+            raw_phone = c_data.get("phone")
+            phone_norm = None
+            if raw_phone and str(raw_phone).strip():
+                if not is_valid_phone_number(raw_phone):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Invalid phone number. Please enter a valid 10-digit mobile number."
+                    )
+                if "phone" in enabled_fields:
+                    phone_norm = normalize_phone_number(raw_phone)
+
+            raw_email = c_data.get("email")
+            email_norm = normalize_email_address(raw_email) if (raw_email and "email" in enabled_fields) else None
+
+            raw_name = c_data.get("full_name")
+            name_norm = raw_name.strip() if (raw_name and "full_name" in enabled_fields) else None
+
+            address_val = c_data.get("billing_address", "").strip() if ("billing_address" in enabled_fields and c_data.get("billing_address")) else None
+            dob_val = c_data.get("date_of_birth", "").strip() if ("date_of_birth" in enabled_fields and c_data.get("date_of_birth")) else None
+            notes_val = c_data.get("notes", "").strip() if ("notes" in enabled_fields and c_data.get("notes")) else None
+
+            # Validate each mandatory field
+            field_map = {
+                "full_name": name_norm,
+                "phone": phone_norm,
+                "email": email_norm,
+                "billing_address": address_val,
+                "date_of_birth": dob_val,
+                "notes": notes_val
+            }
+            for req in required_fields:
+                if not field_map.get(req):
+                    label = FIELD_LABELS.get(req, req)
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Customer detail '{label}' is required by store policy."
+                    )
+
+            # Check if customer with same phone already exists in store
+            if phone_norm:
+                resolved_customer = db.query(Customer).filter(
+                    Customer.store_id == store_id,
+                    Customer.phone == phone_norm
+                ).first()
+
+            if not resolved_customer:
+                now_utc = datetime.now(timezone.utc)
+                resolved_customer = Customer(
+                    store_id=store_id,
+                    full_name=name_norm,
+                    phone=phone_norm,
+                    email=email_norm,
+                    billing_address=address_val,
+                    date_of_birth=dob_val,
+                    notes=notes_val,
+                    consent_given=consent_val,
+                    consent_timestamp=now_utc if consent_val else None
+                )
+                db.add(resolved_customer)
+                db.flush()
+        else:
+            # 1C. Neither customer_id nor customer_data provided (Walk-in attempted)
+            # If any required fields are configured by store owner, walk-in CANNOT bypass them!
+            if required_fields:
+                req_names = ", ".join(FIELD_LABELS.get(r, r) for r in required_fields)
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Customer details are mandatory before generating bill ({req_names}). Walk-in checkout is not permitted when required fields are configured."
+                )
+
+            # If walk-in is explicitly disabled
+            if not cust_settings.allow_walk_in or not cust_settings.customer_selection_optional:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Walk-in billing is disabled by store policy. Customer details must be provided."
+                )
+    else:
+        # Collection disabled: if customer_id provided, look up for receipt display
+        if payload.customer_id:
+            resolved_customer = db.query(Customer).filter(
+                Customer.id == payload.customer_id,
+                Customer.store_id == store_id
+            ).first()
+
+    # ── STEP 2: Product & Stock Validation (Atomic Lock) ──
     subtotal_sum = 0.0
     items_to_create = []
     stock_updates = []
 
-    # Validate items and calculate subtotal
     for item_input in payload.items:
         product = db.query(Product).filter(Product.id == item_input.product_id).with_for_update().first()
         if not product:
@@ -133,7 +273,6 @@ def create_bill(
         item_subtotal = round(item_input.quantity * item_input.unit_price, 2)
         subtotal_sum += item_subtotal
 
-        # Prepare stock deduction record
         before_st = product.current_stock
         after_st = before_st - item_input.quantity
         product.current_stock = after_st
@@ -147,21 +286,34 @@ def create_bill(
             "subtotal": item_subtotal
         })
 
+    # ── STEP 3: Financial Calculations & Bill Generation ──
     tax_amount = round(subtotal_sum * payload.tax_rate, 2)
     total_amount = round(subtotal_sum + tax_amount, 2)
+
+    # Collision-free sequential bill number
+    current_year = datetime.now().year
+    max_id = db.query(func.max(Bill.id)).scalar() or 0
+    bill_number = f"BGT-{current_year}-{str(max_id + 1).zfill(4)}"
+
+    # Link customer_id only if save_purchase_history is enabled in CRM settings
+    should_link_history = bool(
+        resolved_customer and cust_settings and cust_settings.enabled and cust_settings.save_purchase_history
+    )
+    linked_customer_id = resolved_customer.id if (resolved_customer and should_link_history) else None
 
     new_bill = Bill(
         bill_number=bill_number,
         employee_id=current_user.id,
+        customer_id=linked_customer_id,
         total_amount=total_amount,
         tax_amount=tax_amount,
         payment_method=payload.payment_method,
         status="COMPLETED"
     )
     db.add(new_bill)
-    db.flush()  # Populates new_bill.id
+    db.flush()
 
-    # Create BillItems and StockTransactions
+    # ── STEP 4: Inventory Deduction & Stock Transactions ──
     out_items = []
     today = date.today()
 
@@ -231,6 +383,12 @@ def create_bill(
     db.commit()
     db.refresh(new_bill)
 
+    # Return customer info for printing/UI without sensitive internal data (DOB, internal notes)
+    c_name = resolved_customer.full_name if resolved_customer else None
+    c_phone = resolved_customer.phone if resolved_customer else None
+    c_email = resolved_customer.email if resolved_customer else None
+    c_address = resolved_customer.billing_address if resolved_customer else None
+
     return BillOut(
         id=new_bill.id,
         bill_number=new_bill.bill_number,
@@ -240,6 +398,11 @@ def create_bill(
         status=new_bill.status,
         created_at=new_bill.created_at,
         employee_name=current_user.name,
+        customer_id=resolved_customer.id if resolved_customer else None,
+        customer_name=c_name,
+        customer_phone=c_phone,
+        customer_email=c_email,
+        customer_address=c_address,
         items=out_items
     )
 
@@ -256,6 +419,7 @@ def get_bills_history(
     result = []
     for b in bills:
         emp = db.query(User).filter(User.id == b.employee_id).first() if b.employee_id else None
+        cust = db.query(Customer).filter(Customer.id == b.customer_id).first() if b.customer_id else None
         item_list = []
         for it in b.items:
             prod = db.query(Product).filter(Product.id == it.product_id).first()
@@ -277,6 +441,9 @@ def get_bills_history(
             "status": b.status,
             "created_at": b.created_at,
             "employee_name": emp.name if emp else "Counter Staff",
+            "customer_id": b.customer_id,
+            "customer_name": cust.full_name if cust else None,
+            "customer_phone": cust.phone if cust else None,
             "items": item_list
         })
 

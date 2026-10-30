@@ -15,164 +15,207 @@ import {
   Sparkles,
   LayoutDashboard,
   Upload,
-  Compass
+  Compass,
+  Command
 } from 'lucide-react'
 
 export default function Sidebar() {
   const { user, hasRole } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
 
-  const navItems = [
+  const navChapters = [
     {
-      to: '/dashboard',
-      label: 'Dashboard',
-      icon: LayoutDashboard,
-      roles: ['OWNER'],
+      chapter: '01 · UNDERSTAND',
+      items: [
+        {
+          to: '/dashboard',
+          label: 'Executive Story',
+          icon: LayoutDashboard,
+          roles: ['OWNER'],
+        },
+        {
+          to: '/pos',
+          label: 'POS Register',
+          icon: ShoppingCart,
+          roles: ['EMPLOYEE', 'MANAGER', 'OWNER'],
+          shortcut: 'F1',
+        },
+      ],
     },
     {
-      to: '/pos',
-      label: 'POS Billing',
-      icon: ShoppingCart,
-      roles: ['EMPLOYEE', 'MANAGER', 'OWNER'],
-      shortcut: 'F1'
+      chapter: '02 · DISCOVER & ANTICIPATE',
+      items: [
+        {
+          to: '/inventory',
+          label: 'Inventory Health',
+          icon: Boxes,
+          roles: ['MANAGER', 'OWNER'],
+          badge: 'Live',
+        },
+        {
+          to: '/analytics',
+          label: 'Sales Analytics',
+          icon: LineChart,
+          roles: ['OWNER'],
+        },
+        {
+          to: '/market',
+          label: 'Market & Festivals',
+          icon: Compass,
+          roles: ['MANAGER', 'OWNER'],
+        },
+      ],
     },
     {
-      to: '/inventory',
-      label: 'Inventory',
-      icon: Boxes,
-      roles: ['MANAGER', 'OWNER'],
-      badge: 'Live'
+      chapter: '03 · ACT & GROW',
+      items: [
+        {
+          to: '/chat',
+          label: 'AI Store Assistant',
+          icon: Terminal,
+          roles: ['OWNER'],
+          highlight: true,
+        },
+        {
+          to: '/alerts',
+          label: 'Action Alerts',
+          icon: Bell,
+          roles: ['MANAGER', 'OWNER'],
+        },
+        {
+          to: '/reports',
+          label: 'Dossier Reports',
+          icon: FileText,
+          roles: ['MANAGER', 'OWNER'],
+        },
+      ],
     },
     {
-      to: '/chat',
-      label: 'AI Chat',
-      icon: Terminal,
-      roles: ['OWNER'],
-      highlight: true
-    },
-    {
-      to: '/analytics',
-      label: 'Analytics',
-      icon: LineChart,
-      roles: ['OWNER'],
-    },
-    {
-      to: '/market',
-      label: 'Market Trends',
-      icon: Compass,
-      roles: ['MANAGER', 'OWNER'],
-    },
-    {
-      to: '/reports',
-      label: 'Reports',
-      icon: FileText,
-      roles: ['MANAGER', 'OWNER'],
-    },
-    {
-      to: '/alerts',
-      label: 'Alerts',
-      icon: Bell,
-      roles: ['MANAGER', 'OWNER'],
-    },
-    {
-      to: '/settings',
-      label: 'Settings',
-      icon: Settings,
-      roles: ['OWNER'],
-    },
-    {
-      to: '/upload',
-      label: 'Upload Data',
-      icon: Upload,
-      roles: ['MANAGER', 'OWNER'],
+      chapter: 'MANAGE',
+      items: [
+        {
+          to: '/settings',
+          label: 'Store Settings',
+          icon: Settings,
+          roles: ['OWNER'],
+        },
+        {
+          to: '/upload',
+          label: 'Data Ingestion',
+          icon: Upload,
+          roles: ['MANAGER', 'OWNER'],
+        },
+      ],
     },
   ]
 
-  // Filter items visible to user
-  const visibleItems = navItems.filter((item) => hasRole(item.roles))
-
   return (
     <aside
-      className={`border-r border-[var(--border-color)] bg-[var(--bg-surface)] flex flex-col justify-between transition-all duration-200 z-40 ${
-        collapsed ? 'w-16' : 'w-60'
+      className={`border-r border-[var(--border-color)] bg-[var(--bg-surface)] flex flex-col justify-between transition-all duration-200 z-40 select-none ${
+        collapsed ? 'w-16' : 'w-64'
       }`}
     >
-      <div>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
         {/* Brand Header */}
-        <div className="h-14 border-b border-[var(--border-color)] px-4 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 overflow-hidden">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold shrink-0 shadow-sm shadow-blue-500/20">
-              <Store size={18} />
+        <div className="h-16 border-b border-[var(--border-color)] px-4 flex items-center justify-between">
+          <NavLink to="/story" className="flex items-center gap-3 overflow-hidden group cursor-pointer" title="View The Story of Your Business">
+            <div className="w-8 h-8 rounded-none bg-[var(--accent)] border border-black flex items-center justify-center text-black font-extrabold shrink-0 shadow-[2px_2px_0px_#111111] group-hover:translate-x-0.5 transition-transform">
+              <Store size={16} />
             </div>
             {!collapsed && (
-              <div className="flex flex-col">
-                <span className="font-bold text-sm tracking-tight text-[var(--text-main)] flex items-center gap-1">
+              <div className="flex flex-col min-w-0">
+                <span className="font-extrabold text-sm tracking-tight text-[var(--text-main)] font-display uppercase truncate">
                   BusinessGPT
-                  <Sparkles size={11} className="text-blue-500" />
                 </span>
-                <span className="text-[10px] text-[var(--text-muted)] font-mono uppercase tracking-wider">
-                  OS Terminal v8
+                <span className="text-[10px] text-[var(--text-dim)] font-mono uppercase tracking-wider truncate">
+                  [Store OS]
                 </span>
               </div>
             )}
-          </div>
+          </NavLink>
+
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)] transition-colors cursor-pointer"
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className="p-1 rounded text-[var(--text-dim)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)] transition-colors cursor-pointer"
           >
             {collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
           </button>
         </div>
 
-        {/* Navigation Items */}
-        <nav className="p-2 space-y-1">
-          {visibleItems.map((item) => {
-            const Icon = item.icon
+        {/* Navigation Sections */}
+        <div className="py-3 px-2 space-y-4">
+          {navChapters.map((group, groupIdx) => {
+            const visibleInGroup = group.items.filter((item) => hasRole(item.roles))
+            if (visibleInGroup.length === 0) return null
+
             return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                    isActive
-                      ? 'bg-blue-600 text-white font-semibold shadow-sm'
-                      : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)]'
-                  }`
-                }
-                title={collapsed ? item.label : undefined}
-              >
-                <Icon size={17} className="shrink-0" />
+              <div key={groupIdx} className="space-y-1">
                 {!collapsed && (
-                  <div className="flex items-center justify-between w-full">
-                    <span>{item.label}</span>
-                    {item.highlight && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-mono">
-                        AI
-                      </span>
-                    )}
-                    {item.badge && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono">
-                        {item.badge}
-                      </span>
-                    )}
+                  <div className="px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider text-[var(--text-dim)] font-bold">
+                    {group.chapter}
                   </div>
                 )}
-              </NavLink>
+                {visibleInGroup.map((item) => {
+                  const Icon = item.icon
+                  return (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      className={({ isActive }) =>
+                        `group flex items-center gap-3 px-3 py-2 rounded-none text-xs font-semibold transition-all ${
+                          isActive
+                            ? 'bg-[var(--accent)] text-black border border-black shadow-[2px_2px_0px_#111111] font-bold'
+                            : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-elevated)] border border-transparent'
+                        }`
+                      }
+                      title={collapsed ? item.label : undefined}
+                    >
+                      <Icon size={16} className="shrink-0" />
+                      {!collapsed && (
+                        <div className="flex items-center justify-between w-full min-w-0">
+                          <span className="truncate">{item.label}</span>
+                          <div className="flex items-center gap-1.5 shrink-0 ml-1 font-mono text-[9px]">
+                            {item.highlight && (
+                              <span className="px-1 py-0.2 bg-black text-[var(--accent)] font-bold border border-black">
+                                AI
+                              </span>
+                            )}
+                            {item.badge && (
+                              <span className="px-1 py-0.2 bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-main)] font-bold">
+                                {item.badge}
+                              </span>
+                            )}
+                            {item.shortcut && (
+                              <span className="px-1 py-0.2 border border-[var(--border-color)] text-[var(--text-dim)]">
+                                {item.shortcut}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </NavLink>
+                  )
+                })}
+              </div>
             )
           })}
-        </nav>
+        </div>
       </div>
 
       {/* Role Footer */}
       {!collapsed && user && (
-        <div className="p-3 border-t border-[var(--border-color)] m-2 rounded-lg bg-[var(--bg-surface-elevated)]">
-          <div className="text-[11px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">
-            Active Mode
+        <div className="p-3 border-t border-[var(--border-color)] m-2 rounded-none bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] shadow-[2px_2px_0px_var(--border-color)]">
+          <div className="flex items-center justify-between text-[10px] text-[var(--text-dim)] font-mono font-bold">
+            <span>OPERATIONAL ROLE</span>
+            <span className="flex items-center gap-1 text-[var(--text-muted)]">
+              <Command size={10} />K
+            </span>
           </div>
-          <div className="text-xs font-medium text-[var(--text-main)] truncate mt-0.5">
-            {user.role === 'OWNER' && 'Full BI & AI Access'}
-            {user.role === 'MANAGER' && 'Store Operations & Inventory'}
-            {user.role === 'EMPLOYEE' && 'Counter Billing Mode'}
+          <div className="text-xs font-bold font-sans text-[var(--text-main)] mt-0.5 truncate uppercase">
+            {user.role === 'OWNER' && 'Store Owner · Full Access'}
+            {user.role === 'MANAGER' && 'Operations · Inventory Manager'}
+            {user.role === 'EMPLOYEE' && 'Cashier · Counter Billing'}
           </div>
         </div>
       )}
