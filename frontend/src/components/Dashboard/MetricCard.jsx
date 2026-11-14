@@ -4,24 +4,24 @@ import { TrendingUp, TrendingDown } from 'lucide-react'
 export default function MetricCard({ title, value, subtitle, icon: Icon, color = 'blue', trend, loading, chapter = '01' }) {
   const colorStyles = {
     blue: {
-      iconBg: 'bg-[var(--accent-subtle)] text-[var(--accent)] border border-[var(--accent-border)]',
-      borderAccent: 'border-l-[var(--accent)]',
+      iconBg: 'bg-emerald-500/15 text-emerald-800 dark:bg-[var(--accent-subtle)] dark:text-[var(--accent)] border border-emerald-500/30 dark:border-[var(--accent-border)]',
+      borderAccent: 'border-l-emerald-600 dark:border-l-[var(--accent)]',
     },
     green: {
-      iconBg: 'bg-[var(--success-subtle)] text-[var(--success)] border border-[var(--success-border)]',
-      borderAccent: 'border-l-[var(--success)]',
+      iconBg: 'bg-emerald-500/15 text-emerald-800 dark:bg-[var(--success-subtle)] dark:text-[var(--success)] border border-emerald-500/30 dark:border-[var(--success-border)]',
+      borderAccent: 'border-l-emerald-600 dark:border-l-[var(--success)]',
     },
     red: {
-      iconBg: 'bg-[var(--danger-subtle)] text-[var(--danger)] border border-[var(--danger-border)]',
-      borderAccent: 'border-l-[var(--danger)]',
+      iconBg: 'bg-red-500/15 text-red-800 dark:bg-[var(--danger-subtle)] dark:text-[var(--danger)] border border-red-500/30 dark:border-[var(--danger-border)]',
+      borderAccent: 'border-l-red-600 dark:border-l-[var(--danger)]',
     },
     amber: {
-      iconBg: 'bg-[var(--warning-subtle)] text-[var(--warning)] border border-[var(--warning-border)]',
-      borderAccent: 'border-l-[var(--warning)]',
+      iconBg: 'bg-amber-500/15 text-amber-800 dark:bg-[var(--warning-subtle)] dark:text-[var(--warning)] border border-amber-500/30 dark:border-[var(--warning-border)]',
+      borderAccent: 'border-l-amber-600 dark:border-l-[var(--warning)]',
     },
     purple: {
-      iconBg: 'bg-[var(--accent-subtle)] text-[var(--accent)] border border-[var(--accent-border)]',
-      borderAccent: 'border-l-[var(--accent)]',
+      iconBg: 'bg-purple-500/15 text-purple-800 dark:bg-purple-500/20 dark:text-purple-300 border border-purple-500/30',
+      borderAccent: 'border-l-purple-600',
     },
   }
 

@@ -591,7 +591,11 @@ export default function Chat() {
                         : 'bg-[var(--accent)] border-[var(--border-strong)] text-[var(--accent-ink)] shadow-[1px_1px_0px_var(--border-strong)]'
                     }`}
                   >
-                    {isUser ? <UserIcon size={14} className="stroke-[2.2]" /> : <Bot size={14} className="stroke-[2.2]" />}
+                    {isUser ? (
+                      <UserIcon size={14} className="stroke-[2.2]" />
+                    ) : (
+                      <img src="/logo_mark.png" alt="BusinessGPT" className="w-5 h-5 object-contain" />
+                    )}
                   </div>
 
                   {/* Message Bubble & Meta */}
@@ -697,7 +701,7 @@ export default function Chat() {
           {loading && (
             <div className="flex gap-3 max-w-xl">
               <div className="w-7 h-7 rounded-[3px] bg-[var(--accent)] text-[var(--accent-ink)] border-2 border-[var(--border-strong)] shadow-[1px_1px_0px_var(--border-strong)] flex items-center justify-center shrink-0">
-                <Bot size={14} className="stroke-[2.2]" />
+                <img src="/logo_mark.png" alt="BusinessGPT" className="w-5 h-5 object-contain" />
               </div>
               <div className="p-3.5 rounded-[4px] bg-[var(--bg-surface-elevated)] border-2 border-[var(--border-color)] text-xs flex items-center gap-2 text-[var(--text-muted)] font-mono shadow-[2px_2px_0px_var(--border-color)]">
                 <Loader2 size={14} className="animate-spin text-[var(--accent)]" />

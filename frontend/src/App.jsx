@@ -25,12 +25,18 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 
   if (loading) {
     return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[var(--bg-main)] text-[var(--text-main)] font-sans gap-3">
-        <div className="w-8 h-8 rounded-[3px] bg-[var(--accent)] border-2 border-[var(--border-strong)] flex items-center justify-center text-[var(--accent-ink)] font-mono font-extrabold shadow-[2px_2px_0px_var(--border-strong)] animate-pulse">
-          B
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[var(--bg-main)] text-[var(--text-main)] font-sans gap-4 select-none">
+        <div className="w-14 h-14 flex items-center justify-center animate-bounce">
+          <img src="/logo_mark.png" alt="BusinessGPT" className="w-full h-full object-contain drop-shadow-md" />
         </div>
-        <div className="text-xs font-mono text-[var(--text-dim)] uppercase tracking-wider">
-          Initializing The Story of Your Business...
+        <div className="text-center space-y-1">
+          <div className="text-xs font-mono font-bold text-[var(--text-main)] uppercase tracking-widest flex items-center gap-1.5 justify-center">
+            <span>BusinessGPT</span>
+            <span className="text-[var(--accent-ink)] bg-[var(--accent)] px-1 py-0.2 rounded-[2px] text-[10px]">OS</span>
+          </div>
+          <div className="text-[10px] font-mono text-[var(--text-dim)] uppercase tracking-wider">
+            Loading Your Business Partner...
+          </div>
         </div>
       </div>
     )

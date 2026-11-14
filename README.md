@@ -1,60 +1,116 @@
 # BusinessGPT 🤖
-An AI-powered conversational Business Intelligence platform for Indian SME owners.
 
-## Features (Phases 1-3 complete)
-- 📁 **File Upload**: CSV/Excel auto-ingested into PostgreSQL + ChromaDB
-- 🧠 **LangGraph Orchestrator**: Intelligent intent routing (SQL / RAG / Forecast)
-- 🔍 **Hybrid RAG Pipeline**: ChromaDB + Ollama nomic-embed-text
-- 📈 **Sales Forecasting**: Prophet + XGBoost + Random Forest ensemble
-- 🎉 **Indian Festival Calendar**: Diwali, Holi, IPL & more as seasonal signals
-- 💬 **Hindi / Hinglish Support**: Chat in any language
-- ⚡ **Groq LLM**: llama-3.1-8b-instant for fast responses
+> **One BusinessGPT Platform · Two Independent Interfaces · One Shared Backend · One Shared Database**
 
-## Tech Stack
-- **Backend**: FastAPI + SQLAlchemy + PostgreSQL
-- **AI/ML**: LangGraph, LangChain, ChromaDB, Ollama, Groq
-- **Forecasting**: Prophet, XGBoost, Scikit-learn Random Forest
-- **Embeddings**: nomic-embed-text via Ollama (local)
+An AI-powered conversational Business Intelligence, POS Billing, Inventory, and Khata Ledger platform designed specifically for small and medium-sized business owners, retailers, shopkeepers, and supermarket owners in India.
 
-## Setup
+A shopkeeper who does not own a laptop or desktop computer can operate their entire store using only the **BusinessGPT Mobile Application**, while staff or owners with a computer can use the **BusinessGPT Web Application** simultaneously against the same live database.
 
-### 1. Clone and install dependencies
-```bash
-git clone https://github.com/YOUR_USERNAME/businessgpt.git
-cd businessgpt/backend
-pip install -r requirements.txt
+---
+
+## 🏗️ Architecture
+
+```
+       ┌────────────────────────┐         ┌────────────────────────┐
+       │   React Web Frontend   │         │ React Native Mobile App│
+       │  (Vite + Tailwind CSS) │         │ (Expo SDK 52 + Router) │
+       │    http://localhost:3000│         │    Android / iOS / Web │
+       └───────────┬────────────┘         └───────────┬────────────┘
+                   │                                  │
+                   └───────────────┬──────────────────┘
+                                   │ Shared REST & SSE
+                                   ▼
+                   ┌───────────────────────────────┐
+                   │        FastAPI Backend        │
+                   │ (Auth, POS, Inventory, AI/LLM)│
+                   │    http://127.0.0.1:8000      │
+                   └───────────────┬───────────────┘
+                                   ▼
+                   ┌───────────────────────────────┐
+                   │        Shared Database        │
+                   │  PostgreSQL / SQLite (.db)    │
+                   └───────────────────────────────┘
 ```
 
-### 2. Configure environment
-Create a `.env` file in `backend/`:
+---
+
+## 📁 Repository Structure
+
 ```
-DATABASE_URL=postgresql+pg8000://postgres:YOUR_PASSWORD@localhost:5432/businessgpt
-GROQ_API_KEY=your_groq_api_key_here
+BGPT/
+│
+├── backend/                 # FastAPI backend (Python 3.10+, SQLAlchemy, LangGraph)
+│   ├── app/
+│   │   ├── api/             # REST endpoints (auth, pos, inventory, chat, customers, etc.)
+│   │   ├── modules/         # Business services (inventory, forecasting, reports, alerts, etc.)
+│   │   └── main.py          # FastAPI application entrypoint
+│   └── requirements.txt
+│
+├── frontend/                # React + Vite web dashboard (Tailwind CSS, Lucide, Recharts)
+│   ├── src/
+│   │   ├── pages/           # POS, Inventory, Story Dashboard, Customers, Settings
+│   │   └── components/
+│   └── package.json
+│
+├── mobile-app/              # React Native + Expo mobile application (Expo Router, TypeScript)
+│   ├── app/                 # Expo Router tabs, auth, and feature submodules
+│   ├── components/          # Neo-brutalist UI cards, modals, and metric components
+│   ├── constants/           # Palette (#101010, #F5F3EB, #D7FF38), theme, config
+│   ├── services/            # Axios API clients connecting to shared FastAPI backend
+│   ├── store/               # Zustand state stores (auth, cart, offline)
+│   ├── types/               # Shared TypeScript schemas
+│   └── package.json
+│
+├── docs/                    # Architecture & Mobile App guides
+│   └── MOBILE_APP_GUIDE.md
+│
+└── README.md
 ```
 
-### 3. Start services
-- Ensure PostgreSQL is running with a `businessgpt` database
-- Start Ollama: `ollama serve`
-- Pull embedding model: `ollama pull nomic-embed-text`
+---
 
-### 4. Run the server
+## ✨ Features
+
+- ⚡ **High-Speed Mobile POS**: Fast counter checkout, barcode search, multi-tender payments (Cash, UPI, Card, Credit/Udhar), and instant receipts.
+- 📦 **Live Inventory & Stock Health**: Real-time stock counts, category filters, low-stock alerts, and manual stock adjustment audit logs.
+- 🎙️ **Conversational Voice Stock In/Out**: Say *"50 packet Maggi stock aaya"*, review on-screen current vs. projected stock, and confirm directly into the database.
+- 🤖 **AI Store Copilot**: Conversational business insights powered by LangGraph in Hindi, Hinglish, Marathi, and English.
+- 📒 **Customer Ledger & Udhar**: Track customer credit balances, payment histories, and 1-click WhatsApp payment reminders.
+- 📈 **Demand Forecasting & Seasonal Spikes**: Festival-aware demand forecasting (Diwali, Holi, Eid) with recommended purchase reorders.
+- 💬 **WhatsApp Integration**: Cloud webhook and automated invoice sharing directly to customer phones.
+- 📑 **Dossier Business Reports**: Daily store closing summaries and monthly PDF/CSV exports.
+- 🎨 **Neo-Brutalist Design System**: Structured cards, high-contrast borders, Apple SF typography, and minimum 44px touch targets.
+
+---
+
+## 🚀 Getting Started
+
+### 1. Start the FastAPI Backend
 ```bash
 cd backend
-uvicorn app.main:app --reload
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
+Swagger API Documentation is available at **http://127.0.0.1:8000/docs**.
 
-Open **http://127.0.0.1:8000/docs** to access the Swagger UI.
+### 2. Start the React Web Frontend
+```bash
+cd frontend
+npm run dev
+```
+Open **http://localhost:3000** in your browser.
 
-## API Endpoints
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/api/upload` | Upload CSV/Excel file |
-| POST | `/api/chat` | Chat with LangGraph Orchestrator |
-| POST | `/api/forecast/sales` | Generate sales forecast |
+### 3. Start the React Native Mobile Application
+```bash
+cd mobile-app
+npm start
+```
+- Press `a` for Android Emulator.
+- Press `i` for iOS Simulator.
+- Press `w` for Web preview.
+- Or scan the terminal QR code with the **Expo Go** app on your physical smartphone.
 
-## Roadmap
-- [ ] Phase 4: React Frontend
-- [ ] Phase 5: WhatsApp Integration (Twilio)
-- [ ] Phase 6: Voice Input (Whisper)
-- [ ] Phase 7: Inventory Module
-- [ ] Phase 8: Market Intelligence
+---
+
+## 📱 Mobile App Documentation
+
+For in-depth details on mobile build configuration, environment settings, and offline caching, see [docs/MOBILE_APP_GUIDE.md](docs/MOBILE_APP_GUIDE.md).

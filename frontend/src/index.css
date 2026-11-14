@@ -1,12 +1,14 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap');
+@import url('https://fonts.cdnfonts.com/css/sf-pro-display');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --font-display: "Space Grotesk", Arial, "Noto Sans Devanagari", sans-serif;
-  --font-body: "Space Grotesk", Arial, "Noto Sans Devanagari", sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", "Helvetica Neue", Helvetica, Arial, "Noto Sans Devanagari", sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "SF Pro", "Helvetica Neue", Helvetica, Arial, "Noto Sans Devanagari", sans-serif;
+  --font-mono: "SF Mono", SFMono-Regular, ui-monospace, Menlo, Monaco, Consolas, "JetBrains Mono", monospace;
 
   /* Neo-Brutalist Light Mode (Raw Paper & Deep Ink) */
   --color-ink: #111111;
@@ -116,7 +118,7 @@
     letter-spacing: -0.03em;
   }
   code, pre, .font-mono {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-feature-settings: "tnum" on, "zero" on;
   }
 }
@@ -380,3 +382,16 @@
     color: black !important;
   }
 }
+
+/* High-Contrast Readability Guarantee:
+   In light mode, ensure any accent-colored text or icon has deep, clear contrast and is never washed out neon yellow/lime. */
+html:not(.dark) .text-\[var\(--accent\)\]:not(.bg-black):not(.bg-black *) {
+  color: #047857;
+}
+
+html:not(.dark) svg.text-\[var\(--accent\)\],
+html:not(.dark) .text-\[var\(--accent\)\] svg {
+  color: #047857;
+  stroke: currentColor;
+}
+

@@ -85,17 +85,17 @@ export default function StoryLanding() {
       />
 
       {/* ── Minimal Brutalist Navigation ── */}
-      <header className="fixed top-0 left-0 right-0 z-40 h-16 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-6 flex items-center justify-between transition-colors">
+      <header className="fixed top-0 left-0 right-0 z-40 h-16 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-4 sm:px-6 flex items-center justify-between transition-colors">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-none bg-[var(--accent)] border border-[var(--border-strong)] flex items-center justify-center text-black font-extrabold shrink-0 shadow-[2px_2px_0px_#111111]">
-            <Store size={16} />
+          <div className="w-9 h-9 rounded-[4px] bg-transparent flex items-center justify-center shrink-0">
+            <img src="/logo_mark.png" alt="BusinessGPT" className="w-full h-full object-contain drop-shadow-xs" />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="font-extrabold text-base tracking-tighter uppercase font-display text-[var(--text-main)]">
-              BusinessGPT
+              Business<span className="text-[var(--accent)] bg-black px-1 py-0.2 rounded-[2px] ml-0.5">GPT</span>
             </span>
-            <span className="text-[10px] text-[var(--text-dim)] font-mono uppercase tracking-wider hidden sm:inline">
-              [Autonomous Store OS]
+            <span className="text-xs text-[var(--text-muted)] hidden sm:inline font-medium">
+              Your Business Partner
             </span>
           </div>
         </div>
@@ -133,11 +133,11 @@ export default function StoryLanding() {
       {/* ── Fixed Brutalist Scene Navigator (Desktop) ── */}
       <div className="hidden xl:flex fixed right-8 top-1/2 -translate-y-1/2 z-30 flex-col items-end gap-3 select-none">
         {[
-          { id: 1, label: '01 / STATEMENT' },
-          { id: 2, label: '02 / UNDERSTAND' },
-          { id: 3, label: '03 / DISCOVER' },
-          { id: 4, label: '04 / ANTICIPATE' },
-          { id: 5, label: '05 / ACT' },
+          { id: 1, label: 'Overview' },
+          { id: 2, label: 'Understand' },
+          { id: 3, label: 'Discover' },
+          { id: 4, label: 'Anticipate' },
+          { id: 5, label: 'Actions' },
         ].map((s) => (
           <button
             key={s.id}
@@ -170,27 +170,28 @@ export default function StoryLanding() {
         className="min-h-screen flex flex-col justify-center px-6 sm:px-12 lg:px-20 pt-28 pb-16 relative border-b border-[var(--border-color)]"
       >
         <div className="max-w-6xl w-full mx-auto space-y-8">
-          <div className="flex items-center gap-2">
-            <span className="chapter-pill bg-[var(--accent)] text-black border-black font-bold">
-              01 / THE OPENING STATEMENT
-            </span>
-            <span className="text-xs font-mono text-[var(--text-dim)] uppercase">
-              Edition 2026 · Indian SME Architecture
-            </span>
-          </div>
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 pt-2">
+            <div className="space-y-4 max-w-3xl">
+              <h1 className="headline-brutal text-[var(--text-main)] font-display">
+                YOUR BUSINESS.
+                <br />
+                <span className="bg-[var(--accent)] text-black px-2 inline-block border border-black shadow-[4px_4px_0px_#111111]">
+                  YOUR NEXT MOVE.
+                </span>
+              </h1>
 
-          <div className="space-y-4">
-            <h1 className="headline-brutal text-[var(--text-main)] font-display max-w-5xl">
-              YOUR BUSINESS.
-              <br />
-              <span className="bg-[var(--accent)] text-black px-2 inline-block border border-black shadow-[4px_4px_0px_#111111]">
-                YOUR NEXT MOVE.
-              </span>
-            </h1>
+              <p className="text-lg sm:text-2xl text-[var(--text-muted)] font-sans max-w-2xl font-normal leading-relaxed pt-2">
+                Understand what&apos;s happening. Discover what matters. Decide what comes next.
+              </p>
+            </div>
 
-            <p className="text-lg sm:text-2xl text-[var(--text-muted)] font-sans max-w-2xl font-normal leading-relaxed pt-2">
-              Understand what&apos;s happening. Discover what matters. Decide what comes next.
-            </p>
+            <div className="hidden md:flex justify-center shrink-0">
+              <img
+                src="/logo_transparent.png"
+                alt="BusinessGPT - Your Business Partner"
+                className="w-56 sm:w-64 lg:w-72 h-auto object-contain drop-shadow-xl hover:scale-105 transition-transform duration-300"
+              />
+            </div>
           </div>
 
           <div className="pt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
@@ -249,13 +250,6 @@ export default function StoryLanding() {
             transition={{ duration: 0.4 }}
             className="space-y-6"
           >
-            <div className="flex items-center gap-2">
-              <span className="chapter-pill">02 / UNDERSTAND</span>
-              <span className="text-xs font-mono text-[var(--text-dim)] uppercase">
-                What is happening right now
-              </span>
-            </div>
-
             <h2 className="headline-section text-[var(--text-main)] font-display">
               FIRST, SEE
               <br />
@@ -286,8 +280,8 @@ export default function StoryLanding() {
             className="os-surface p-6 space-y-5 border-2 border-[var(--border-strong)] shadow-[6px_6px_0px_#111111] dark:shadow-[6px_6px_0px_#000000]"
           >
             <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
-              <span className="font-mono text-xs font-bold uppercase tracking-wider text-[var(--text-main)]">
-                [LIVE TELEMETRY STREAM]
+              <span className="font-sans text-xs font-bold uppercase tracking-wider text-[var(--text-main)]">
+                Live Telemetry Stream
               </span>
               <span className="badge-optimal font-bold">ACTIVE</span>
             </div>
@@ -347,8 +341,8 @@ export default function StoryLanding() {
             className="os-surface p-6 space-y-4 border-2 border-[var(--border-strong)] shadow-[6px_6px_0px_#111111] dark:shadow-[6px_6px_0px_#000000] order-2 lg:order-1"
           >
             <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
-              <span className="font-mono text-xs font-bold uppercase text-[var(--text-main)]">
-                [STOCK & MARGIN DISCOVERY]
+              <span className="font-sans text-xs font-bold uppercase text-[var(--text-main)]">
+                Stock & Margin Discovery
               </span>
               <span className="text-[10px] font-mono text-[var(--text-dim)]">Realtime Audit</span>
             </div>
@@ -385,13 +379,6 @@ export default function StoryLanding() {
             transition={{ duration: 0.4 }}
             className="space-y-6 order-1 lg:order-2"
           >
-            <div className="flex items-center gap-2">
-              <span className="chapter-pill">03 / DISCOVER</span>
-              <span className="text-xs font-mono text-[var(--text-dim)] uppercase">
-                What changed and why it matters
-              </span>
-            </div>
-
             <h2 className="headline-section text-[var(--text-main)] font-display">
               LOOK CLOSER.
               <br />
@@ -426,13 +413,6 @@ export default function StoryLanding() {
             transition={{ duration: 0.4 }}
             className="space-y-6"
           >
-            <div className="flex items-center gap-2">
-              <span className="chapter-pill">04 / ANTICIPATE</span>
-              <span className="text-xs font-mono text-[var(--text-dim)] uppercase">
-                Predictive Horizon & Festivals
-              </span>
-            </div>
-
             <h2 className="headline-section text-[var(--text-main)] font-display">
               BEFORE THE
               <br />
@@ -458,8 +438,8 @@ export default function StoryLanding() {
             className="os-surface p-6 space-y-4 border-2 border-[var(--border-strong)] shadow-[6px_6px_0px_#111111] dark:shadow-[6px_6px_0px_#000000]"
           >
             <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
-              <span className="font-mono text-xs font-bold uppercase text-[var(--text-main)]">
-                [30-DAY PREDICTIVE FORECAST]
+              <span className="font-sans text-xs font-bold uppercase text-[var(--text-main)]">
+                30-Day Predictive Sales Forecast
               </span>
               <span className="badge-blue font-bold">SURGE DETECTED</span>
             </div>
@@ -506,13 +486,6 @@ export default function StoryLanding() {
             transition={{ duration: 0.4 }}
             className="max-w-2xl space-y-4"
           >
-            <div className="flex items-center gap-2">
-              <span className="chapter-pill">05 / ACT</span>
-              <span className="text-xs font-mono text-[var(--text-dim)] uppercase">
-                Decide what comes next
-              </span>
-            </div>
-
             <h2 className="headline-section text-[var(--text-main)] font-display">
               MAKE YOUR
               <br />

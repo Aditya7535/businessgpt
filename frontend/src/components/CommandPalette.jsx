@@ -226,8 +226,8 @@ export default function CommandPalette() {
           {/* Pages */}
           {filteredPages.length > 0 && (
             <div className="py-1">
-              <div className="px-3 py-1 text-[10px] font-mono uppercase tracking-wider text-[var(--text-dim)] font-bold">
-                [PAGES & WORKSPACES]
+              <div className="px-3 py-1 text-[10px] font-sans uppercase tracking-wider text-[var(--text-dim)] font-bold">
+                Pages & Workspaces
               </div>
               {filteredPages.map((page) => {
                 const itemIndex = flatItems.findIndex((it) => it.type === 'page' && it.data.id === page.id)
@@ -258,8 +258,8 @@ export default function CommandPalette() {
           {/* Products */}
           {products.length > 0 && (
             <div className="py-1">
-              <div className="px-3 py-1 text-[10px] font-mono uppercase tracking-wider text-[var(--text-dim)] font-bold flex items-center justify-between">
-                <span>[INVENTORY PRODUCTS]</span>
+              <div className="px-3 py-1 text-[10px] font-sans uppercase tracking-wider text-[var(--text-dim)] font-bold flex items-center justify-between">
+                <span>Inventory Products</span>
                 {isSearchingProducts && <span className="animate-pulse">Searching...</span>}
               </div>
               {products.map((prod) => {
@@ -295,8 +295,8 @@ export default function CommandPalette() {
           {/* AI Prompts */}
           {filteredAi.length > 0 && (
             <div className="py-1">
-              <div className="px-3 py-1 text-[10px] font-mono uppercase tracking-wider text-[var(--text-dim)] font-bold flex items-center gap-1">
-                <span>[ASK STORE ASSISTANT]</span>
+              <div className="px-3 py-1 text-[10px] font-sans uppercase tracking-wider text-[var(--text-dim)] font-bold flex items-center gap-1">
+                <span>Ask Store Assistant</span>
               </div>
               {filteredAi.map((aiText, idx) => {
                 const itemIndex = flatItems.findIndex((it) => it.type === 'ai' && it.data === aiText)
@@ -359,7 +359,7 @@ export default function CommandPalette() {
               Select
             </span>
           </div>
-          <span>[BusinessGPT OS]</span>
+          <span>BusinessGPT OS</span>
         </div>
       </div>
     </div>

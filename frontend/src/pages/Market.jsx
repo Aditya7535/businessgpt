@@ -154,7 +154,7 @@ export default function Market() {
         <div>
           <div className="flex items-center gap-2 mb-1.5">
             <span className="font-mono text-[10px] uppercase font-bold tracking-widest px-2.5 py-0.5 bg-[var(--bg-surface-elevated)] border border-[var(--border-color)]">
-              Market Externalities · Chapter 03
+              Market Externalities & Seasonality
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-extrabold uppercase tracking-tight text-[var(--text-main)] font-display">

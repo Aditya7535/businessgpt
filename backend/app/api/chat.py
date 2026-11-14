@@ -26,6 +26,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
+    answer: Optional[str] = None
     module_used: str
     sources: List[str]
     confidence: float
@@ -106,6 +107,7 @@ async def chat_endpoint(
 
         return ChatResponse(
             response=reply_text,
+            answer=reply_text,
             module_used=module_used,
             sources=sources,
             confidence=confidence,

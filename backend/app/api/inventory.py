@@ -298,7 +298,8 @@ def get_stock_transactions(
 # ─── Conversational Natural Language Inventory Adjustment Endpoints ───
 
 class NaturalAdjustRequest(BaseModel):
-    message: str = Field(..., min_length=1, description="Spoken or typed natural language update")
+    message: Optional[str] = Field(None, description="Spoken or typed natural language update")
+    command: Optional[str] = Field(None, description="Alternative field for command string")
     session_id: Optional[str] = None
     store_id: Optional[int] = 1
     source: Optional[str] = "inventory_ui"
@@ -330,7 +331,7 @@ def natural_inventory_adjustment(
     store_id = payload.store_id or getattr(current_user, "store_id", 1) or 1
 
     result = handle_conversational_inventory(
-        query=payload.message,
+        query=payload.message or payload.command or "",
         session_id=session_id,
         user=current_user,
         store_id=store_id,

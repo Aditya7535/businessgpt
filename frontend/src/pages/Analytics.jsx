@@ -60,7 +60,7 @@ export default function Analytics() {
           {payload.map((entry, index) => (
             <p key={index} className="font-bold flex items-center justify-between gap-3 text-[var(--text-main)]">
               <span className="capitalize">{entry.name}:</span>
-              <span className="font-mono text-[var(--accent)]">
+              <span className="font-mono text-emerald-700 dark:text-[var(--accent)]">
                 ₹{Number(entry.value).toLocaleString('en-IN')}
               </span>
             </p>
@@ -84,7 +84,7 @@ export default function Analytics() {
         <div>
           <div className="flex items-center gap-2 mb-1.5">
             <span className="font-mono text-[10px] uppercase font-bold tracking-widest px-2.5 py-0.5 bg-[var(--bg-surface-elevated)] border border-[var(--border-color)]">
-              Financial Intelligence · Chapter 02
+              Financial & Sales Intelligence
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-extrabold uppercase tracking-tight text-[var(--text-main)] font-display">
@@ -184,7 +184,7 @@ export default function Analytics() {
                 Average Basket Size
               </span>
             </div>
-            <div className="text-2xl font-extrabold text-[var(--accent)] font-mono">
+            <div className="text-2xl font-extrabold text-emerald-800 dark:text-[var(--accent)] font-mono">
               ₹{Math.round(data.avg_order_value || 0).toLocaleString('en-IN')}
             </div>
             <p className="text-[11px] text-[var(--text-muted)]">Spend per transaction</p>
@@ -339,7 +339,7 @@ export default function Analytics() {
                     <td className="px-4 py-3 text-right font-mono font-semibold">
                       {item.units_sold || item.quantity || 0}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-[var(--accent)]">
+                    <td className="px-4 py-3 text-right font-mono font-bold text-emerald-800 dark:text-[var(--accent)]">
                       ₹{Number(item.revenue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
                   </tr>

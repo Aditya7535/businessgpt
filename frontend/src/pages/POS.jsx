@@ -505,7 +505,7 @@ export default function POS() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div>
               <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--text-dim)] font-bold block">
-                Chapter 01 · Immediate Counter Register
+                Counter Billing Register
               </span>
               <h2 className="text-base font-extrabold uppercase tracking-tight text-[var(--text-main)] font-display">
                 Point of Sale Terminal

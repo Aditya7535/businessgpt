@@ -188,7 +188,7 @@ export default function PrintModal({
             <div className="center" style={{ fontSize: '10px', marginTop: '6px' }}>
               Thank You! Visit Again.
               <br />
-              Powered by BusinessGPT Enterprise
+              <strong>BUSINESSGPT</strong> — YOUR BUSINESS PARTNER
             </div>
           </div>
         </div>

@@ -65,3 +65,9 @@ frontend/dist/
 .pytest_cache/
 .coverage
 htmlcov/
+
+
+# ── Expo / Mobile ──
+.expo/
+*.expo
+web-build/

@@ -334,7 +334,7 @@ export default function Settings() {
       <form onSubmit={handleSaveSettings} className="os-surface p-5 space-y-4">
         <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
           <h2 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
-            <Store size={16} className="text-[var(--accent)]" />
+            <Store size={16} className="text-emerald-700 dark:text-[var(--accent)]" />
             Store Master Identity & GST Parameters
           </h2>
           <span className="text-[10px] font-mono text-[var(--text-dim)]">
@@ -421,7 +421,7 @@ export default function Settings() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-color)] pb-3">
           <div>
             <h2 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
-              <Contact size={16} className="text-[var(--accent)]" />
+              <Contact size={16} className="text-emerald-700 dark:text-[var(--accent)]" />
               Customer Information
             </h2>
             <p className="text-[11px] text-[var(--text-muted)]">
@@ -711,7 +711,7 @@ export default function Settings() {
         <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
           <div>
             <h2 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
-              <Users size={16} className="text-[var(--accent)]" />
+              <Users size={16} className="text-emerald-700 dark:text-[var(--accent)]" />
               Staff Team & PIN Access Control
             </h2>
             <p className="text-[11px] text-[var(--text-muted)]">

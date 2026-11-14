@@ -124,7 +124,7 @@ export default function Dashboard() {
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className="font-mono text-[10px] uppercase font-bold tracking-widest px-2.5 py-0.5 bg-[var(--bg-surface-elevated)] border border-[var(--border-color)]">
-              Operating Ledger · Chapter 01
+              Store Executive Overview
             </span>
           </div>
           <h1 className="text-2xl sm:text-4xl font-extrabold uppercase tracking-tight text-[var(--text-main)] font-display">
@@ -157,15 +157,79 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* CHAPTER 01 — UNDERSTAND */}
+      {/* ── User-Friendly Quick Action Ribbon ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <button
+          onClick={() => navigate('/pos')}
+          className="p-3 bg-[var(--bg-surface)] border-2 border-[var(--border-color)] hover:border-black hover:bg-[var(--accent)] hover:text-black transition-all rounded-[3px] text-left group shadow-[2px_2px_0px_var(--border-color)] flex items-center justify-between cursor-pointer"
+        >
+          <div>
+            <div className="font-bold text-xs uppercase flex items-center gap-1.5 font-display">
+              <ShoppingCart size={14} />
+              <span>POS Billing</span>
+            </div>
+            <div className="text-[10px] font-mono text-[var(--text-dim)] group-hover:text-black mt-0.5">
+              Instant Bill [F1]
+            </div>
+          </div>
+          <ArrowRight size={13} className="text-[var(--text-dim)] group-hover:text-black group-hover:translate-x-0.5 transition-transform" />
+        </button>
+
+        <button
+          onClick={() => navigate('/chat', { state: { initialQuery: 'Agle hafte ka sales forecast aur top items batao' } })}
+          className="p-3 bg-[var(--bg-surface)] border-2 border-[var(--border-color)] hover:border-black hover:bg-[var(--accent)] hover:text-black transition-all rounded-[3px] text-left group shadow-[2px_2px_0px_var(--border-color)] flex items-center justify-between cursor-pointer"
+        >
+          <div>
+            <div className="font-bold text-xs uppercase flex items-center gap-1.5 font-display">
+              <Sparkles size={14} />
+              <span>Ask AI Copilot</span>
+            </div>
+            <div className="text-[10px] font-mono text-[var(--text-dim)] group-hover:text-black mt-0.5">
+              Hindi & English Chat
+            </div>
+          </div>
+          <ArrowRight size={13} className="text-[var(--text-dim)] group-hover:text-black group-hover:translate-x-0.5 transition-transform" />
+        </button>
+
+        <button
+          onClick={() => navigate('/inventory')}
+          className="p-3 bg-[var(--bg-surface)] border-2 border-[var(--border-color)] hover:border-black hover:bg-[var(--accent)] hover:text-black transition-all rounded-[3px] text-left group shadow-[2px_2px_0px_var(--border-color)] flex items-center justify-between cursor-pointer"
+        >
+          <div>
+            <div className="font-bold text-xs uppercase flex items-center gap-1.5 font-display">
+              <Boxes size={14} />
+              <span>Stock & Alerts</span>
+            </div>
+            <div className="text-[10px] font-mono text-[var(--text-dim)] group-hover:text-black mt-0.5">
+              {totalLowStock > 0 ? `${totalLowStock} Items Low` : 'Healthy Inventory'}
+            </div>
+          </div>
+          <ArrowRight size={13} className="text-[var(--text-dim)] group-hover:text-black group-hover:translate-x-0.5 transition-transform" />
+        </button>
+
+        <button
+          onClick={() => navigate('/market')}
+          className="p-3 bg-[var(--bg-surface)] border-2 border-[var(--border-color)] hover:border-black hover:bg-[var(--accent)] hover:text-black transition-all rounded-[3px] text-left group shadow-[2px_2px_0px_var(--border-color)] flex items-center justify-between cursor-pointer"
+        >
+          <div>
+            <div className="font-bold text-xs uppercase flex items-center gap-1.5 font-display">
+              <Compass size={14} />
+              <span>Festival Insights</span>
+            </div>
+            <div className="text-[10px] font-mono text-[var(--text-dim)] group-hover:text-black mt-0.5">
+              Diwali & Holi Spikes
+            </div>
+          </div>
+          <ArrowRight size={13} className="text-[var(--text-dim)] group-hover:text-black group-hover:translate-x-0.5 transition-transform" />
+        </button>
+      </div>
+
+      {/* ── Realtime Store Performance ── */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--text-dim)] font-bold">
-              Chapter 01
-            </span>
-            <span className="text-xs font-semibold text-[var(--text-main)]">
-              Understand · Realtime Store State
+            <span className="text-xs font-bold text-[var(--text-main)] uppercase tracking-wide">
+              Realtime Store State & Metrics
             </span>
           </div>
           <span className="text-[11px] text-[var(--text-muted)] font-mono">
@@ -226,14 +290,11 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* CHAPTER 02 & 03 — DISCOVER & ANTICIPATE */}
+      {/* ── Sales Forecast & Health Radar ── */}
       <section className="space-y-3">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--text-dim)] font-bold">
-            Chapter 02 & 03
-          </span>
-          <span className="text-xs font-semibold text-[var(--text-main)]">
-            Discover & Anticipate · 30-Day Sales Forecast
+          <span className="text-xs font-bold text-[var(--text-main)] uppercase tracking-wide">
+            Predictive Sales Trajectory & 30-Day Outlook
           </span>
         </div>
 
@@ -269,14 +330,11 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* CHAPTER 04 & 05 — ACT & GROW */}
+      {/* ── Priority Action Directives ── */}
       <section className="space-y-3">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--text-dim)] font-bold">
-            Chapter 04 & 05
-          </span>
-          <span className="text-xs font-semibold text-[var(--text-main)]">
-            Act & Grow · Priority Directives & Quick Execution
+          <span className="text-xs font-bold text-[var(--text-main)] uppercase tracking-wide">
+            Action Directives & Operational Signals
           </span>
         </div>
 
@@ -294,7 +352,7 @@ export default function Dashboard() {
               </div>
               <button
                 onClick={() => generateAlerts().then(() => loadData(true))}
-                className="text-xs font-semibold text-[var(--accent)] hover:underline cursor-pointer flex items-center gap-1"
+                className="text-xs font-semibold text-emerald-700 dark:text-[var(--accent)] hover:underline cursor-pointer flex items-center gap-1"
               >
                 <Sparkles size={12} />
                 <span>Refresh Store Alerts</span>
@@ -363,7 +421,7 @@ export default function Dashboard() {
                   className="w-full flex items-center justify-between p-3 rounded-[3px] border border-[var(--border-color)] bg-[var(--bg-surface-elevated)] hover:border-[var(--border-strong)] hover:bg-[var(--accent)] hover:text-[var(--accent-ink)] transition-all text-left group cursor-pointer shadow-[2px_2px_0px_var(--border-color)] active:translate-x-0.5 active:translate-y-0.5"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="p-2 rounded-[2px] bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--accent)] group-hover:text-[var(--accent-ink)] group-hover:scale-105 transition-transform">
+                    <div className="p-2 rounded-[2px] bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--text-main)] group-hover:text-[var(--accent-ink)] group-hover:scale-105 transition-transform">
                       <Icon className="w-4 h-4 stroke-[2.2]" />
                     </div>
                     <div className="min-w-0">
