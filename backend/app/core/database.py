@@ -1,4 +1,5 @@
 import logging
+import ssl
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from app.core.config import settings, _normalize_database_url
@@ -16,6 +17,9 @@ def _create_resilient_engine():
         kwargs["connect_args"] = {"check_same_thread": False}
     else:
         kwargs["pool_recycle"] = 300
+        if "pg8000" in target_url:
+            ssl_ctx = ssl.create_default_context()
+            kwargs["connect_args"] = {"ssl_context": ssl_ctx}
 
     try:
         candidate_engine = create_engine(target_url, **kwargs)

@@ -71,3 +71,4 @@ htmlcov/
 .expo/
 *.expo
 web-build/
+.neon

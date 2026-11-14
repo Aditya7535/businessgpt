@@ -40,9 +40,17 @@ def _normalize_database_url(url: str) -> str:
             return f"sqlite:///{backend_db.as_posix()}"
         return url
     if url.startswith("postgres://"):
-        return url.replace("postgres://", "postgresql+pg8000://", 1)
-    if url.startswith("postgresql://") and not url.startswith("postgresql+"):
-        return url.replace("postgresql://", "postgresql+pg8000://", 1)
+        url = url.replace("postgres://", "postgresql+pg8000://", 1)
+    elif url.startswith("postgresql://") and not url.startswith("postgresql+"):
+        url = url.replace("postgresql://", "postgresql+pg8000://", 1)
+
+    if "postgresql+pg8000://" in url and "?" in url:
+        base, query = url.split("?", 1)
+        params = urllib.parse.parse_qsl(query)
+        # Filter out pg8000-incompatible query parameters (SSL context is configured via connect_args)
+        filtered = [(k, v) for k, v in params if k.lower() not in ("sslmode", "channel_binding")]
+        url = f"{base}?{urllib.parse.urlencode(filtered)}" if filtered else base
+
     return url
 
 class Settings(BaseSettings):
