@@ -68,7 +68,7 @@ def run_migrations():
     Base.metadata.create_all(bind=engine)
 
     with engine.connect() as conn:
-        inspector = inspect(engine)
+        inspector = inspect(conn)
 
         # 1. Migrate `products` table
         product_cols = [c["name"] for c in inspector.get_columns("products")]

@@ -49,24 +49,27 @@ app.add_middleware(
 # ── Startup / Shutdown ──
 @app.on_event("startup")
 async def startup_event():
-    # Attempt DB table creation and initial seeding
-    for attempt in range(1, 6):
-        try:
-            seed_database()
-            run_migrations()
-            logger.info("Database tables and seed data initialized successfully.")
-            break
-        except Exception as e:
-            logger.warning(f"Database connection attempt {attempt}/5 failed: {e}")
-            if attempt < 5:
-                time.sleep(2)
-            else:
-                logger.error("Could not connect to database after 5 attempts. App will start, but DB features may fail.")
+    import asyncio
+    def init_db():
+        for attempt in range(1, 6):
+            try:
+                seed_database()
+                run_migrations()
+                logger.info("Database tables and seed data initialized successfully.")
+                break
+            except Exception as e:
+                logger.warning(f"Database connection attempt {attempt}/5 failed: {e}")
+                if attempt < 5:
+                    time.sleep(2)
+                else:
+                    logger.error("Could not connect to database after 5 attempts. App will start, but DB features may fail.")
 
-    try:
-        start_scheduler()
-    except Exception as e:
-        logger.error(f"Scheduler startup error: {e}")
+        try:
+            start_scheduler()
+        except Exception as e:
+            logger.error(f"Scheduler startup error: {e}")
+
+    asyncio.create_task(asyncio.to_thread(init_db))
 
 @app.on_event("shutdown")
 async def shutdown_event():
